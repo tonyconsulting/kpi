@@ -2,6 +2,7 @@
 "use strict";
 const API = "https://gwococcxzrrtadtricnd.supabase.co/functions/v1/kpi";
 const CLE_LS = "kpi_code";
+const VAPID_PUB = "BBefpGJrlJu2jhuahy0XnidzpnE5nfZ84kRh3YueXISXD036WLlbQu50vebuJcKKiF05xz5Cj_C__Qa8wc_YWNQ";
 const FIN_MOIS = "2026-09-30";
 const PTS = { vmens: 300, v12: 660 };
 const HYP = { fille: { lead: 0.5, chaud: 0.5, close: 1 / 3 }, gars: { rep: 0.34, redi: 0.42, set: 0.5, close: 1 / 3 } };
@@ -165,6 +166,52 @@ function ventesSemaine(saisies, jourISO) {
 }
 function saisiesDe(id) { return SAISIES.filter((s) => s.membre_id === id); }
 
+/* ================== notifications ================== */
+function b64ToU8(b64) {
+  const pad = "=".repeat((4 - (b64.length % 4)) % 4);
+  const raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+}
+async function etatNotifs() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return "indispo";
+  if (Notification.permission === "denied") return "refuse";
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg && (await reg.pushManager.getSubscription());
+    return sub ? "actif" : "inactif";
+  } catch { return "indispo"; }
+}
+async function activeNotifs(btn) {
+  busy(btn, true);
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") { toast("Notifications refusées par le téléphone", true); busy(btn, false); return; }
+    const reg = await navigator.serviceWorker.register("sw.js");
+    await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToU8(VAPID_PUB) });
+    await api({ action: "push_subscribe", sub: sub.toJSON() });
+    await api({ action: "push_test" });
+    toast("Rappels activés sur cet appareil ✔");
+  } catch (e) { toast("Activation impossible : " + e.message, true); }
+  busy(btn, false);
+  rendsPage(PAGE);
+}
+function notifsCarteHTML(etat) {
+  const ios = /iPhone|iPad/.test(navigator.userAgent);
+  if (etat === "actif") return `<div class="card" style="margin-top:14px"><div class="chart-title">🔔 Rappels activés sur cet appareil — tu recevras une notification le soir si ta journée n'est pas remplie.</div></div>`;
+  if (etat === "indispo") return ios ? `<div class="card" style="margin-top:14px"><div class="chart-title">🔔 Pour recevoir les rappels sur iPhone : ajoute d'abord l'app à ton écran d'accueil (Partager → « Sur l'écran d'accueil »), puis reviens activer ici.</div></div>` : "";
+  if (etat === "refuse") return `<div class="card" style="margin-top:14px"><div class="chart-title">🔔 Les notifications sont bloquées dans les réglages du téléphone pour cette app.</div></div>`;
+  return `<div class="card" style="margin-top:14px">
+    <div class="chart-title">Reçois un rappel automatique le soir si ta journée n'est pas remplie.</div>
+    <button class="abtn oui" id="btnNotifs">Activer les rappels sur cet appareil</button>
+    ${ios ? `<div class="foot" style="margin-top:10px">iPhone : ajoute d'abord l'app sur ton écran d'accueil.</div>` : ""}
+  </div>`;
+}
+async function brancheNotifs(sec) {
+  const b = $("#btnNotifs", sec);
+  if (b) b.onclick = () => activeNotifs(b);
+}
+
 /* ================== shell ================== */
 function pagesPour(role) {
   if (role === "admin") return [
@@ -177,7 +224,7 @@ const TITRES = {
   saisie: ["Ma saisie du soir", "30 secondes chaque soir, c'est le moteur du mois"],
   historique: ["Historique", "Toutes tes journées de septembre"],
   equipe: ["L'équipe", ""],
-  reglages: ["Réglages", "L'heure limite du soir, par défaut et par personne"],
+  reglages: ["Réglages", "Rappel automatique + heure limite, par défaut et par personne"],
   liens: ["Liens personnels", "À distribuer en privé, chacun ne voit que son KPI"],
 };
 function montreNav() {
@@ -301,9 +348,10 @@ function rendsJour(sec, id, cfg, saisies) {
     progressionHTML(cfg, dz.t, dz.jr) +
     `<div style="display:flex;gap:10px;flex-wrap:wrap">
       <button class="abtn oui" id="allerSaisie">Remplir ma journée</button>
-    </div>` + ratiosHTML(dz);
+    </div>` + ratiosHTML(dz) + `<div id="zoneNotifs"></div>`;
   const b = $("#allerSaisie", sec);
   if (b) b.onclick = () => montre("saisie");
+  etatNotifs().then((et) => { const z = $("#zoneNotifs", sec); if (z) { z.innerHTML = notifsCarteHTML(et); brancheNotifs(sec); } });
 }
 function formHTML(cfg, s, jour, prefixe) {
   const type = cfg.type || "fille";
@@ -446,31 +494,40 @@ function ouvreFiche(id) {
 }
 function rendsReglages(sec) {
   const h = PARAMS.heure_limite || { defaut: "21:00", par_membre: {} };
+  const rp = PARAMS.rappel_heure || { defaut: "20:30", par_membre: {} };
   const actifs = (MEMBRES || []).filter((m) => m.actif && m.role !== "admin");
-  const lignes = actifs.map((m) => `
+  const lignes = (p, pref) => actifs.map((m) => `
     <div class="field" style="display:grid;grid-template-columns:1fr 130px;align-items:center;gap:10px;margin-bottom:8px">
       <label style="margin:0;display:flex;align-items:center;gap:8px;color:var(--ink);font-size:14px">${aviHTML(m.id, m.prenom, 24)}${esc(m.prenom)}</label>
-      <input type="time" id="hl_${m.id}" value="${esc((h.par_membre || {})[m.id] || "")}">
+      <input type="time" id="${pref}_${m.id}" value="${esc((p.par_membre || {})[m.id] || "")}">
     </div>`).join("");
   sec.innerHTML = `<div class="card" style="max-width:560px">
-    <div class="chart-title">Après cette heure (heure française), une journée non remplie passe en <b style="color:var(--bad)">rouge</b> — chez toi et chez la personne.</div>
+    <div class="chart-title">🔔 <b>Heure du rappel</b> — la notification « ta journée t'attend » part automatiquement à cette heure (heure française) si la journée n'est pas remplie.</div>
     <div class="field" style="display:grid;grid-template-columns:1fr 130px;align-items:center;gap:10px">
-      <label style="margin:0;color:var(--ink);font-weight:650;font-size:14px">Heure par défaut (tout le monde)</label>
+      <label style="margin:0;color:var(--ink);font-weight:650;font-size:14px">Rappel par défaut (tout le monde)</label>
+      <input type="time" id="rp_defaut" value="${esc(rp.defaut)}"></div>
+    <details class="regl" style="margin-top:8px"><summary>Personnaliser le rappel par personne</summary>${lignes(rp, "rp")}</details>
+  </div>
+  <div class="card" style="max-width:560px;margin-top:14px">
+    <div class="chart-title">🔴 <b>Heure limite</b> — après cette heure, une journée non remplie passe en rouge (chez toi et chez la personne) et tu reçois le récap des retardataires.</div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 130px;align-items:center;gap:10px">
+      <label style="margin:0;color:var(--ink);font-weight:650;font-size:14px">Limite par défaut (tout le monde)</label>
       <input type="time" id="hl_defaut" value="${esc(h.defaut)}"></div>
-    <div style="border-top:1px solid var(--line);margin:12px 0;padding-top:12px;color:var(--muted);font-size:12.5px">Personnaliser par personne (vide = heure par défaut)</div>
-    ${lignes}
-    <button class="submit" id="hl_save">Enregistrer les heures</button>
-  </div>`;
+    <details class="regl" style="margin-top:8px"><summary>Personnaliser la limite par personne</summary>${lignes(h, "hl")}</details>
+  </div>
+  <div style="max-width:560px"><button class="submit" id="hl_save" style="margin-top:14px">Enregistrer les heures</button>
+  <div id="zoneNotifs"></div></div>`;
   $("#hl_save").onclick = async () => {
     const btn = $("#hl_save"); busy(btn, true);
     try {
-      const par_membre = {};
-      for (const m of actifs) { const v = $("#hl_" + m.id).value; if (v) par_membre[m.id] = v; }
-      await api({ action: "param_set", cle: "heure_limite", valeur: { defaut: $("#hl_defaut").value || "21:00", par_membre } });
+      const ram = (pref) => { const par_membre = {}; for (const m of actifs) { const v = $("#" + pref + "_" + m.id).value; if (v) par_membre[m.id] = v; } return par_membre; };
+      await api({ action: "param_set", cle: "rappel_heure", valeur: { defaut: $("#rp_defaut").value || "20:30", par_membre: ram("rp") } });
+      await api({ action: "param_set", cle: "heure_limite", valeur: { defaut: $("#hl_defaut").value || "21:00", par_membre: ram("hl") } });
       await chargeTout();
       toast("Heures enregistrées ✔"); montre("reglages");
     } catch (e) { toast("Erreur : " + e.message, true); busy(btn, false); }
   };
+  etatNotifs().then((et) => { const z = $("#zoneNotifs", sec); if (z) { z.innerHTML = notifsCarteHTML(et); brancheNotifs(sec); } });
 }
 function rendsLiens(sec) {
   const base = location.origin + location.pathname;
