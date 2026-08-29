@@ -58,7 +58,7 @@ const SVG = {
   flamme: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.4-.5-2-1-3 1.1-2.2 2.8-3.5 5-4 0 2.5 1.5 3.5 2.5 5a7 7 0 1 1-11.4 3.2"/></svg>',
 };
 
-let CODE = null, MOI = null, PARAMS = {}, MEMBRES = null, SAISIES = [], PAGE = null;
+let CODE = null, MOI = null, PARAMS = {}, MEMBRES = null, SAISIES = [], PAGE = null, JOUR_RENDU = null;
 
 /* ================== utilitaires ================== */
 const $ = (s, r) => (r || document).querySelector(s);
@@ -71,7 +71,7 @@ function toast(msg, err) {
   requestAnimationFrame(() => t.classList.add("on"));
   clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("on"), 2800);
 }
-function busy(btn, on) { if (btn) btn.classList.toggle("busy", !!on); }
+function busy(btn, on) { if (btn) { btn.classList.toggle("busy", !!on); btn.disabled = !!on; } }
 function initiale(p) { return (p || "?").trim().charAt(0).toUpperCase(); }
 function couleurAvi(id) { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return COULEURS_AVI[h % COULEURS_AVI.length]; }
 function aviHTML(id, prenom, taille) {
@@ -114,16 +114,16 @@ function totaux(saisies) {
 }
 function ratios(type, t) {
   if (type === "gars") return {
-    rep: t.dms > 0 ? (t.reponses || 0) / t.dms : HYP.gars.rep,
-    redi: (t.reponses || 0) > 0 ? (t.redis || 0) / t.reponses : HYP.gars.redi,
-    set: (t.redis || 0) > 0 ? (t.settes || 0) / t.redis : HYP.gars.set,
-    close: (t.settes || 0) > 0 ? t._ventes / t.settes : HYP.gars.close,
+    rep: t.dms > 0 && (t.reponses || 0) > 0 ? t.reponses / t.dms : HYP.gars.rep,
+    redi: (t.reponses || 0) > 0 && (t.redis || 0) > 0 ? t.redis / t.reponses : HYP.gars.redi,
+    set: (t.redis || 0) > 0 && (t.settes || 0) > 0 ? t.settes / t.redis : HYP.gars.set,
+    close: (t.settes || 0) > 0 && t._ventes > 0 ? t._ventes / t.settes : HYP.gars.close,
     mesure: t.dms > 0,
   };
   return {
-    lead: (t.conversations || 0) > 0 ? (t.leads || 0) / t.conversations : HYP.fille.lead,
-    chaud: (t.leads || 0) > 0 ? (t.chauds || 0) / t.leads : HYP.fille.chaud,
-    close: (t.chauds || 0) > 0 ? t._ventes / t.chauds : HYP.fille.close,
+    lead: (t.conversations || 0) > 0 && (t.leads || 0) > 0 ? t.leads / t.conversations : HYP.fille.lead,
+    chaud: (t.leads || 0) > 0 && (t.chauds || 0) > 0 ? t.chauds / t.leads : HYP.fille.chaud,
+    close: (t.chauds || 0) > 0 && t._ventes > 0 ? t._ventes / t.chauds : HYP.fille.close,
     mesure: (t.conversations || 0) > 0,
   };
 }
@@ -131,7 +131,8 @@ function dose(cfg, saisies, jour) {
   const t = totaux(saisies);
   const restant = Math.max(0, (cfg.cible_pts || 0) - t._pts);
   const jr = joursRestants(jour);
-  const vj = restant / PTS.vmens / jr;
+  const ppv = t._ventes > 0 ? ((+t.vmens || 0) * PTS.vmens + (+t.v12 || 0) * PTS.v12 + (+t.autres_pts || 0)) / t._ventes : PTS.vmens;
+  const vj = restant / ppv / jr;
   const type = cfg.type || "fille";
   const r = ratios(type, t);
   const garde = (x) => Math.max(0.05, x);
@@ -149,14 +150,14 @@ function dose(cfg, saisies, jour) {
     const dms = Math.max(cfg.plancher_dms || 200, Math.ceil(reps / garde(r.rep)));
     return { type, restant, jr, t, r,
       principal: { n: dms, l: `DMs aujourd'hui + ${cfg.plancher_fu || 25} follow-ups (ton plancher)` },
-      petits: [[arr1(reps), "réponses visées"], [arr1(redis), "redirigés visés"], [arr1(settes), "settés visés"], [arr1(vj), "ventes (équiv. mens.)"]] };
+      petits: [[arr1(reps), "réponses visées"], [arr1(redis), "redirigés visés"], [arr1(settes), "settés visés"], [arr1(vj), "ventes visées"]] };
   }
   const chauds = vj / garde(r.close);
   const leads = chauds / garde(r.chaud);
   const conv = Math.ceil(leads / garde(r.lead));
   return { type, restant, jr, t, r,
     principal: { n: conv, l: "conversations à ouvrir aujourd'hui" },
-    petits: [[arr1(leads), "leads visés"], [arr1(chauds), "leads chauds visés"], [arr1(vj), "ventes (équiv. mens.)"]] };
+    petits: [[arr1(leads), "leads visés"], [arr1(chauds), "leads chauds visés"], [arr1(vj), "ventes visées"]] };
 }
 function arr1(x) { return Math.round(x * 10) / 10; }
 function heureLimite(id) {
@@ -291,8 +292,8 @@ function bandeauHTML(id, saisies) {
   const s = saisieDuJour(saisies, jour);
   const lim = heureLimite(id);
   if (s) return `<div class="toast" style="display:block;background:#0e2117;border-color:#1d4230;color:#86efac">Journée du ${esc(joliJour(jour))} remplie à ${esc(joliHeure(s.maj))} ✔</div>`;
-  if (heure >= lim) return `<div class="toast" style="display:block;background:#2a0f12;border-color:#7f1d1d;color:#fca5a5">⚠️ Il est plus de ${esc(lim)} et ta journée n'est pas remplie. Vas-y maintenant, 30 secondes.</div>`;
-  return `<div class="toast" style="display:block;background:var(--raise);border-color:var(--line);color:var(--muted);font-weight:500">Journée du ${esc(joliJour(jour))} à remplir avant ${esc(lim)}.</div>`;
+  if (heure >= lim) return `<div class="toast" data-va="1" style="display:block;cursor:pointer;background:#2a0f12;border-color:#7f1d1d;color:#fca5a5">⚠️ Il est plus de ${esc(lim)} et ta journée n'est pas remplie. Vas-y maintenant, 30 secondes.</div>`;
+  return `<div class="toast" data-va="1" style="display:block;cursor:pointer;background:var(--raise);border-color:var(--line);color:var(--muted);font-weight:500">Journée du ${esc(joliJour(jour))} à remplir avant ${esc(lim)}.</div>`;
 }
 function progressionHTML(cfg, t, jr) {
   const pct = Math.min(100, Math.round((t._pts / (cfg.cible_pts || 1)) * 100));
@@ -349,35 +350,52 @@ function rendsJour(sec, id, cfg, saisies) {
       `<span style="color:var(--accent)">${esc(dz.principal.n)}</span>`, esc(dz.principal.l)) +
     dz.petits.slice(0, 2).map(([n, l]) => kpiCarteHTML("→", l, esc(String(n)), "")).join("") +
     (cibleSem ? kpiCarteHTML("🎯", "Ventes cette semaine", `${vs}<span style="font-size:20px;color:var(--muted)"> / ${cibleSem}</span>`, vs >= cibleSem ? "objectif de la semaine atteint ✔" : "l'objectif se joue là", vs < cibleSem) : "");
+  const aRempli = !!saisieDuJour(saisies, jour);
+  const btnSaisie = `<button class="abtn oui" id="allerSaisie" style="width:100%;max-width:640px;padding:14px;margin-top:14px">${aRempli ? "Corriger ma journée" : "Remplir ma journée"}</button>`;
   sec.innerHTML = bandeauHTML(id, saisies) +
+    (aRempli ? "" : btnSaisie) +
     `<div class="grid3" style="margin-top:14px">${cartes}</div>` +
     progressionHTML(cfg, dz.t, dz.jr) +
-    `<div style="display:flex;gap:10px;flex-wrap:wrap">
-      <button class="abtn oui" id="allerSaisie">Remplir ma journée</button>
-    </div>` + ratiosHTML(dz) + `<div id="zoneNotifs"></div>`;
+    (aRempli ? btnSaisie : "") +
+    ratiosHTML(dz) + `<div id="zoneNotifs"></div>`;
   const b = $("#allerSaisie", sec);
   if (b) b.onclick = () => montre("saisie");
+  const bv = $("[data-va]", sec);
+  if (bv) bv.onclick = () => montre("saisie");
   etatNotifs().then((et) => { const z = $("#zoneNotifs", sec); if (z) { z.innerHTML = notifsCarteHTML(et); brancheNotifs(sec); } });
 }
+const RARES = ["vmens", "v12", "autres_pts", "passages", "renouv_pts"];
 function formHTML(cfg, s, jour, prefixe) {
   const type = cfg.type || "fille";
   const champs = CHAMPS_UI[type] || CHAMPS_UI.fille;
   const d = (s && s.d) || {};
-  const moitie = Math.ceil(champs.length / 2);
-  const rangs = [];
-  for (let i = 0; i < champs.length; i += 2) {
-    const paire = champs.slice(i, i + 2).map(([k, label, aide]) => `
-      <div class="field"><label>${esc(label)}${aide ? ` — <span style="color:var(--muted)">${esc(aide)}</span>` : ""}</label>
-      <input type="number" inputmode="decimal" min="0" step="1" id="${prefixe}_${k}" value="${d[k] != null ? d[k] : ""}" placeholder="0"></div>`).join("");
-    rangs.push(`<div class="row2">${paire}</div>`);
+  const paires = (liste) => {
+    const rangs = [];
+    for (let i = 0; i < liste.length; i += 2) {
+      const paire = liste.slice(i, i + 2).map(([k, label, aide]) => `
+      <div class="field"><label for="${prefixe}_${k}">${esc(label)}${aide ? ` — <span style="color:var(--muted)">${esc(aide)}</span>` : ""}</label>
+      <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" id="${prefixe}_${k}" value="${d[k] != null ? d[k] : ""}" placeholder="0"></div>`).join("");
+      rangs.push(`<div class="row2">${paire}</div>`);
+    }
+    return rangs.join("");
+  };
+  let corps;
+  if (type === "leader") {
+    corps = paires(champs);
+  } else {
+    const quotidiens = champs.filter(([k]) => !RARES.includes(k));
+    const rares = champs.filter(([k]) => RARES.includes(k));
+    const ouvert = rares.some(([k]) => +d[k] > 0);
+    corps = paires(quotidiens) +
+      `<details class="regl" id="${prefixe}_rares"${ouvert ? " open" : ""}><summary>Ventes, passages, renouvellements</summary>${paires(rares)}</details>`;
   }
   return `<form class="form" autocomplete="off" onsubmit="return false">
-    <div class="field" style="max-width:200px"><label>Jour</label>
+    <div class="field" style="max-width:200px"><label for="${prefixe}_jour">Jour</label>
       <input type="date" id="${prefixe}_jour" value="${jour}" min="2026-08-25" max="2026-12-31"></div>
-    ${rangs.join("")}
-    <div class="field"><label>Ton blocage du jour — une phrase, Tony te répond avec l'axe du lendemain</label>
+    ${corps}
+    <div class="field"><label for="${prefixe}_blocage">Ton blocage du jour — une phrase, Tony te répond avec l'axe du lendemain</label>
       <textarea id="${prefixe}_blocage" maxlength="500" placeholder="ex : plein de leads mais personne veut le call…">${esc((s && s.blocage) || "")}</textarea></div>
-    <button class="submit" id="${prefixe}_save">Enregistrer ma journée</button>
+    <button type="button" class="submit" id="${prefixe}_save">Enregistrer ma journée</button>
   </form>`;
 }
 function brancheForm(cfg, prefixe, membreId, apres) {
@@ -389,19 +407,23 @@ function brancheForm(cfg, prefixe, membreId, apres) {
     const s = saisieDuJour(src, e.target.value);
     for (const [k] of (CHAMPS_UI[type] || CHAMPS_UI.fille)) $("#" + prefixe + "_" + k).value = s && s.d && s.d[k] != null ? s.d[k] : "";
     $("#" + prefixe + "_blocage").value = (s && s.blocage) || "";
+    const det = $("#" + prefixe + "_rares");
+    if (det) det.open = RARES.some((k) => { const e2 = $("#" + prefixe + "_" + k); return e2 && +e2.value > 0; });
   };
   btn.onclick = async () => {
     busy(btn, true);
     try {
       const d = {};
       for (const [k] of (CHAMPS_UI[type] || CHAMPS_UI.fille)) {
-        const v = $("#" + prefixe + "_" + k).value;
-        if (v !== "") d[k] = +v;
+        const n = parseInt($("#" + prefixe + "_" + k).value, 10);
+        if (!isNaN(n)) d[k] = n;
       }
       const corps = { action: "saisie", jour: $("#" + prefixe + "_jour").value, d, blocage: $("#" + prefixe + "_blocage").value };
       if (membreId) corps.membre_id = membreId;
       await api(corps);
-      toast("Journée enregistrée ✔");
+      const p = ptsJour(d);
+      toast("Journée enregistrée ✔" + (p > 0 ? " +" + p.toLocaleString("fr-FR") + " pts" : ""));
+      try { navigator.clearAppBadge && navigator.clearAppBadge(); } catch (_) {}
       await chargeTout();
       apres();
     } catch (e) { toast("Erreur : " + e.message, true); busy(btn, false); }
@@ -411,7 +433,7 @@ function rendsSaisie(sec, id, cfg, saisies) {
   const { jour } = parisMaintenant();
   const s = saisieDuJour(saisies, jour);
   sec.innerHTML = bandeauHTML(id, saisies) + `<div class="card" style="margin-top:14px;max-width:640px">` + formHTML(cfg, s, jour, "f") + `</div>`;
-  brancheForm(cfg, "f", null, () => montre("jour"));
+  brancheForm(cfg, "f", null, () => { montre("jour"); const g = $("#page-jour .gbar"); if (g) g.closest(".card").classList.add("flashG"); });
 }
 function rendsHistorique(sec, cfg, saisies) {
   sec.innerHTML = histTableHTML(cfg, saisies);
@@ -555,6 +577,7 @@ function rendsLiens(sec) {
 
 /* ================== routeur de rendu ================== */
 function rendsPage(page) {
+  JOUR_RENDU = parisMaintenant().jour;
   const sec = $("#page-" + page);
   if (!sec) return;
   if (MOI.role === "admin") {
@@ -571,9 +594,8 @@ function rendsPage(page) {
 
 /* ================== chargement ================== */
 async function chargeTout() {
-  const cfg = await api({ action: "config" });
+  const [cfg, d] = await Promise.all([api({ action: "config" }), api({ action: "data" })]);
   MOI = cfg.moi; PARAMS = cfg.parametres || {}; MEMBRES = cfg.membres;
-  const d = await api({ action: "data" });
   SAISIES = MOI.role === "admin" ? (d.saisies || []) : (d.saisies || []).map((s) => ({ ...s, membre_id: MOI.id }));
   majStatut(true);
 }
@@ -588,22 +610,31 @@ function brancheShell() {
   // Rafraîchissement silencieux : retour au premier plan + toutes les 5 min.
   // Jamais sur les pages formulaire (saisie, réglages) ni fiche ouverte, pour ne pas écraser une frappe.
   const pagesSures = ["jour", "equipe", "historique", "liens"];
+  const ficheOuverte = () => { const ov = $("#ficheOverlay"); return ov && ov.style.display !== "none"; };
   const rafraichis = async () => {
     if (document.visibilityState !== "visible") return;
-    if (!pagesSures.includes(PAGE)) return;
-    const ov = $("#ficheOverlay");
-    if (ov && ov.style.display !== "none") return;
-    try { await chargeTout(); rendsPage(PAGE); majBadges(); } catch { majStatut(false); }
+    // Un jour est passé depuis le dernier rendu : re-render obligatoire même sur la saisie,
+    // sinon le formulaire garde la date d'hier et écraserait la journée d'hier.
+    const nouveauJour = JOUR_RENDU && parisMaintenant().jour !== JOUR_RENDU;
+    if (!nouveauJour && (!pagesSures.includes(PAGE) || ficheOuverte())) return;
+    try { await chargeTout(); } catch { majStatut(false); return; }
+    // La situation a pu changer pendant le fetch : re-vérifier avant d'écraser le DOM.
+    if (!nouveauJour && (!pagesSures.includes(PAGE) || ficheOuverte())) { majBadges(); return; }
+    rendsPage(PAGE);
+    majBadges();
   };
   document.addEventListener("visibilitychange", rafraichis);
   setInterval(rafraichis, 5 * 60 * 1000);
   setInterval(majBadges, 60 * 1000);
 }
-function montreVerrou(msg) {
+function montreVerrou(msg, retry) {
   $("#splash").style.display = "none";
   $("#app").style.display = "none";
   $("#lock").style.display = "block";
   if (msg) $("#lockMsg").textContent = msg;
+  const r = $("#btnRetry"), f = $("#lockForm");
+  if (r) { r.style.display = retry ? "block" : "none"; r.onclick = () => location.reload(); }
+  if (f) f.style.display = retry ? "none" : "block";
   $("#btnCodeLock").onclick = () => {
     let v = $("#inCodeLock").value.trim();
     const m = v.match(/[?&]c=([^&\s]+)/); if (m) v = m[1];
@@ -621,7 +652,7 @@ function montreVerrou(msg) {
     await chargeTout();
   } catch (e) {
     if (String(e.message).includes("code")) { montreVerrou("Ce lien n'est plus valide. Demande ton lien personnel à Tony."); return; }
-    montreVerrou("Impossible de charger. Vérifie ta connexion et recharge la page."); return;
+    montreVerrou("Impossible de charger. Vérifie ta connexion puis réessaie.", true); return;
   }
   $("#splash").style.display = "none";
   $("#app").style.display = "flex";
@@ -634,6 +665,5 @@ function montreVerrou(msg) {
   brancheShell();
   montreNav();
   montre(MOI.role === "admin" ? "equipe" : "jour");
-  setInterval(async () => { try { await chargeTout(); rendsPage(PAGE); majBadges(); } catch { majStatut(false); } }, 5 * 60 * 1000);
-  setInterval(majBadges, 60 * 1000);
+  try { navigator.clearAppBadge && navigator.clearAppBadge(); } catch (_) {}
 })();
