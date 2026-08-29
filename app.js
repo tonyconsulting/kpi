@@ -164,6 +164,10 @@ function heureLimite(id) {
   const h = PARAMS.heure_limite || { defaut: "21:00", par_membre: {} };
   return (h.par_membre || {})[id] || h.defaut || "21:00";
 }
+function heureRappel(id) {
+  const h = PARAMS.rappel_heure || { defaut: "20:30", par_membre: {} };
+  return (h.par_membre || {})[id] || h.defaut || "20:30";
+}
 function saisieDuJour(saisies, jour) { return saisies.find((s) => s.jour === jour); }
 function ventesSemaine(saisies, jourISO) {
   const d = new Date(jourISO + "T12:00:00Z");
@@ -345,19 +349,25 @@ function rendsJour(sec, id, cfg, saisies) {
   const dz = dose(cfg, saisies, jour);
   const vs = ventesSemaine(saisies, jour);
   const cibleSem = cfg.ventes_sem || 0;
-  const cartes =
-    kpiCarteHTML(SVG.flamme, dz.type === "leader" ? "Tes branches" : "Ta dose du jour",
-      `<span style="color:var(--accent)">${esc(dz.principal.n)}</span>`, esc(dz.principal.l)) +
-    dz.petits.slice(0, 2).map(([n, l]) => kpiCarteHTML("→", l, esc(String(n)), "")).join("") +
-    (cibleSem ? kpiCarteHTML("🎯", "Ventes cette semaine", `${vs}<span style="font-size:20px;color:var(--muted)"> / ${cibleSem}</span>`, vs >= cibleSem ? "objectif de la semaine atteint ✔" : "l'objectif se joue là", vs < cibleSem) : "");
   const aRempli = !!saisieDuJour(saisies, jour);
   const btnSaisie = `<button class="abtn oui" id="allerSaisie" style="width:100%;max-width:640px;padding:14px;margin-top:14px">${aRempli ? "Corriger ma journée" : "Remplir ma journée"}</button>`;
+  const grande = `<div class="card kpi" style="margin-top:14px">
+    <div class="itile">${SVG.flamme}</div>
+    <div class="label">${dz.type === "leader" ? "Tes branches" : "Ta dose du jour"}</div>
+    <div class="value" style="font-size:${dz.type === "leader" ? 30 : 54}px;line-height:1.15"><span style="color:var(--accent)">${esc(dz.principal.n)}</span></div>
+    <div class="hint">${esc(dz.principal.l)}</div>
+  </div>`;
+  const detail = `<details class="regl card" style="margin-top:14px"><summary>Le détail (semaine, ratios)</summary>
+    <div class="grid3" style="margin-top:14px">` +
+    dz.petits.map(([n, l]) => kpiCarteHTML("→", l, esc(String(n)), "")).join("") +
+    (cibleSem ? kpiCarteHTML("🎯", "Ventes cette semaine", `${vs}<span style="font-size:20px;color:var(--muted)"> / ${cibleSem}</span>`, vs >= cibleSem ? "objectif de la semaine atteint ✔" : "l'objectif se joue là", vs < cibleSem) : "") +
+    `</div>` + ratiosHTML(dz) + `</details>`;
   sec.innerHTML = bandeauHTML(id, saisies) +
     (aRempli ? "" : btnSaisie) +
-    `<div class="grid3" style="margin-top:14px">${cartes}</div>` +
+    grande +
     progressionHTML(cfg, dz.t, dz.jr) +
     (aRempli ? btnSaisie : "") +
-    ratiosHTML(dz) + `<div id="zoneNotifs"></div>`;
+    detail + `<div id="zoneNotifs"></div>`;
   const b = $("#allerSaisie", sec);
   if (b) b.onclick = () => montre("saisie");
   const bv = $("[data-va]", sec);
@@ -430,10 +440,96 @@ function brancheForm(cfg, prefixe, membreId, apres) {
   };
 }
 function rendsSaisie(sec, id, cfg, saisies) {
-  const { jour } = parisMaintenant();
-  const s = saisieDuJour(saisies, jour);
-  sec.innerHTML = bandeauHTML(id, saisies) + `<div class="card" style="margin-top:14px;max-width:640px">` + formHTML(cfg, s, jour, "f") + `</div>`;
-  brancheForm(cfg, "f", null, () => { montre("jour"); const g = $("#page-jour .gbar"); if (g) g.closest(".card").classList.add("flashG"); });
+  rendsAssistant(sec, cfg, parisMaintenant().jour);
+}
+function etapesDe(type) {
+  const champs = CHAMPS_UI[type] || CHAMPS_UI.fille;
+  const quot = type === "leader" ? champs.filter(([k]) => k === "pts_b1" || k === "pts_b2") : champs.filter(([k]) => !RARES.includes(k));
+  const rares = champs.filter(([k]) => RARES.includes(k));
+  return { quot, rares };
+}
+function rendsAssistant(sec, cfg, jourInit) {
+  const type = cfg.type || "fille";
+  const { quot, rares } = etapesDe(type);
+  const etapes = quot.map((c) => ({ genre: "num", c })).concat([{ genre: "ventes" }, { genre: "fin" }]);
+  const total = etapes.length;
+  let jour = jourInit, vals = {}, blocage = "", i = 0;
+  const charge = () => {
+    const sx = saisieDuJour(SAISIES, jour);
+    vals = {}; blocage = (sx && sx.blocage) || "";
+    if (sx && sx.d) for (const [k, v] of Object.entries(sx.d)) vals[k] = v;
+  };
+  charge();
+  const rends = () => {
+    const e = etapes[i];
+    const nav = (avecSuivant) => `<div class="wiz-nav">
+      ${i > 0 ? `<button type="button" class="abtn" id="wRetour">Retour</button>` : `<span></span>`}
+      ${avecSuivant ? `<button type="button" class="abtn oui" id="wSuivant" style="padding:12px 26px">Suivant</button>` : ""}</div>`;
+    let corps = "";
+    if (e.genre === "num") {
+      const [k, label, aide] = e.c;
+      corps = `<div class="wiz-q">${esc(label)}</div>${aide ? `<div class="wiz-hint">${esc(aide)}</div>` : ""}
+        <input class="wiz-in" id="wVal" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" value="${vals[k] != null ? vals[k] : ""}" placeholder="0">
+        <div class="wiz-pm">
+          <button type="button" data-pm="-1">−1</button>
+          <button type="button" data-pm="1">+1</button>
+          <button type="button" data-pm="5">+5</button>
+          <button type="button" data-pm="25">+25</button>
+        </div>` + nav(true);
+    } else if (e.genre === "ventes") {
+      corps = `<div class="wiz-q">Des ventes aujourd'hui ?</div><div class="wiz-hint">Laisse vide si rien — ça compte dans tes points.</div>
+        <div class="wiz-rares">` + rares.map(([k, label, aide]) => `
+          <div class="field"><label for="w_${k}">${esc(label)}${aide ? ` — <span style="color:var(--muted)">${esc(aide)}</span>` : ""}</label>
+          <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" id="w_${k}" value="${vals[k] != null ? vals[k] : ""}" placeholder="0"></div>`).join("") + `</div>` + nav(true);
+    } else {
+      corps = `<div class="wiz-q">Un blocage aujourd'hui ?</div><div class="wiz-hint">Une phrase, Tony te répond avec l'axe du lendemain.</div>
+        <div class="field" style="margin-top:14px"><textarea id="wBlocage" maxlength="500" placeholder="ex : plein de leads mais personne veut le call…">${esc(blocage)}</textarea></div>
+        <button type="button" class="submit" id="wSave" style="margin-top:14px">Enregistrer ma journée</button>` + nav(false);
+    }
+    sec.innerHTML = `<div class="card wiz" style="max-width:640px">
+      <div class="wiz-top">
+        <input type="date" id="wJour" value="${jour}" min="2026-08-25" max="2026-12-31" aria-label="Jour">
+        <span class="wiz-count">${i + 1} / ${total}</span>
+      </div>
+      <div class="wiz-prog"><i style="width:${Math.round(((i + 1) / total) * 100)}%"></i></div>
+      ${corps}</div>`;
+    const garde = () => {
+      const e2 = etapes[i];
+      if (e2.genre === "num") { const el = $("#wVal", sec); if (el) vals[e2.c[0]] = el.value; }
+      if (e2.genre === "ventes") for (const [k] of rares) { const el = $("#w_" + k, sec); if (el) vals[k] = el.value; }
+      if (e2.genre === "fin") { const el = $("#wBlocage", sec); if (el) blocage = el.value; }
+    };
+    $("#wJour", sec).onchange = (ev) => { jour = ev.target.value; charge(); i = 0; rends(); };
+    const back = $("#wRetour", sec); if (back) back.onclick = () => { garde(); i--; rends(); };
+    const nx = $("#wSuivant", sec); if (nx) nx.onclick = () => { garde(); i++; rends(); };
+    const inp = $("#wVal", sec);
+    if (inp) {
+      for (const b of $$(".wiz-pm button", sec)) b.onclick = () => {
+        inp.value = Math.max(0, (parseInt(inp.value, 10) || 0) + parseInt(b.dataset.pm, 10));
+      };
+      inp.onkeydown = (ev) => { if (ev.key === "Enter") { ev.preventDefault(); if (nx) nx.onclick(); } };
+    }
+    const sv = $("#wSave", sec);
+    if (sv) sv.onclick = async () => {
+      garde();
+      busy(sv, true);
+      try {
+        const d = {};
+        for (const [k] of (CHAMPS_UI[type] || CHAMPS_UI.fille)) {
+          const n = parseInt(vals[k], 10);
+          if (!isNaN(n)) d[k] = n;
+        }
+        await api({ action: "saisie", jour, d, blocage });
+        const p = ptsJour(d);
+        toast("Journée enregistrée ✔" + (p > 0 ? " +" + p.toLocaleString("fr-FR") + " pts" : ""));
+        try { navigator.clearAppBadge && navigator.clearAppBadge(); } catch (_) {}
+        await chargeTout();
+        montre("jour");
+        const g = $("#page-jour .gbar"); if (g) g.closest(".card").classList.add("flashG");
+      } catch (err) { toast("Erreur : " + err.message, true); busy(sv, false); }
+    };
+  };
+  rends();
 }
 function rendsHistorique(sec, cfg, saisies) {
   sec.innerHTML = histTableHTML(cfg, saisies);
@@ -664,6 +760,8 @@ function montreVerrou(msg, retry) {
   if (MOI.role === "admin") $("#footMotto").textContent = "Le rouge se règle le soir même, jamais le lendemain.";
   brancheShell();
   montreNav();
-  montre(MOI.role === "admin" ? "equipe" : "jour");
+  const pm0 = parisMaintenant();
+  const saisieDirecte = MOI.role !== "admin" && !saisieDuJour(SAISIES, pm0.jour) && pm0.heure >= heureRappel(MOI.id);
+  montre(MOI.role === "admin" ? "equipe" : (saisieDirecte ? "saisie" : "jour"));
   try { navigator.clearAppBadge && navigator.clearAppBadge(); } catch (_) {}
 })();
