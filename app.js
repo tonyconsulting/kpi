@@ -4,7 +4,7 @@ const API = "https://gwococcxzrrtadtricnd.supabase.co/functions/v1/kpi";
 const CLE_LS = "kpi_code";
 const VAPID_PUB = "BBefpGJrlJu2jhuahy0XnidzpnE5nfZ84kRh3YueXISXD036WLlbQu50vebuJcKKiF05xz5Cj_C__Qa8wc_YWNQ";
 const FIN_MOIS = "2026-09-30";
-const PTS = { vmens: 300, v12: 660 };
+const PTS = { vmens: 300, v12: 660, passage: 150 };
 const HYP = { fille: { lead: 0.5, chaud: 0.5, close: 1 / 3 }, gars: { rep: 0.34, redi: 0.42, set: 0.5, close: 1 / 3 } };
 const COULEURS_AVI = ["#a78bfa", "#34d399", "#f472b6", "#60a5fa", "#fbbf24", "#f87171", "#2dd4bf", "#c084fc", "#fb923c"];
 
@@ -16,6 +16,8 @@ const CHAMPS_UI = {
     ["vmens", "Ventes mensuelles", "packs 1 mois — 300 pts"],
     ["v12", "Ventes 12 mois", "compte double — 660 pts"],
     ["autres_pts", "Autres packs (en points)", "Pro 150 · Premium 230 · Pro an 530 · Prem. an 600"],
+    ["passages", "Passages de position", "150 pts chacun"],
+    ["renouv_pts", "Renouvellements (en points)", "mois 2 : 95 · m3 : 85 · m4 : 75 · m5 : 65 · m6+ : 50"],
     ["contenus", "Contenus postés", "stories + posts + vidéos"],
   ],
   gars: [
@@ -27,19 +29,23 @@ const CHAMPS_UI = {
     ["vmens", "Ventes mensuelles", "packs 1 mois — 300 pts"],
     ["v12", "Ventes 12 mois", "compte double — 660 pts"],
     ["autres_pts", "Autres packs (en points)", "Pro 150 · Premium 230 · Pro an 530 · Prem. an 600"],
+    ["passages", "Passages de position", "150 pts chacun"],
+    ["renouv_pts", "Renouvellements (en points)", "mois 2 : 95 · m3 : 85 · m4 : 75 · m5 : 65 · m6+ : 50"],
   ],
   leader: [
     ["vmens", "Ventes perso mensuelles", "300 pts"],
     ["v12", "Ventes perso 12 mois", "compte double — 660 pts"],
     ["autres_pts", "Autres packs (en points)", ""],
+    ["passages", "Passages de position", "150 pts chacun"],
+    ["renouv_pts", "Renouvellements (en points)", "mois 2 : 95 · m3 : 85 · m4 : 75 · m5 : 65 · m6+ : 50"],
     ["pts_b1", "Points branche 1 (relevé du jour)", "le total affiché dans ton back-office"],
     ["pts_b2", "Points branche 2 (relevé du jour)", ""],
   ],
 };
 const COLS_HIST = {
-  fille: [["conversations", "Conv."], ["leads", "Leads"], ["chauds", "Chauds"], ["vmens", "V. mens"], ["v12", "V. 12m"], ["contenus", "Contenus"]],
-  gars: [["dms", "DMs"], ["fu", "FU"], ["reponses", "Rép."], ["redis", "Redi"], ["settes", "Settés"], ["vmens", "V. mens"], ["v12", "V. 12m"]],
-  leader: [["vmens", "V. mens"], ["v12", "V. 12m"], ["pts_b1", "Branche 1"], ["pts_b2", "Branche 2"]],
+  fille: [["conversations", "Conv."], ["leads", "Leads"], ["chauds", "Chauds"], ["vmens", "V. mens"], ["v12", "V. 12m"], ["passages", "Pass."], ["renouv_pts", "Renouv."], ["contenus", "Contenus"]],
+  gars: [["dms", "DMs"], ["fu", "FU"], ["reponses", "Rép."], ["redis", "Redi"], ["settes", "Settés"], ["vmens", "V. mens"], ["v12", "V. 12m"], ["passages", "Pass."], ["renouv_pts", "Renouv."]],
+  leader: [["vmens", "V. mens"], ["v12", "V. 12m"], ["passages", "Pass."], ["renouv_pts", "Renouv."], ["pts_b1", "Branche 1"], ["pts_b2", "Branche 2"]],
 };
 
 const SVG = {
@@ -89,7 +95,7 @@ function joliJour(iso) {
 function joliHeure(ts) {
   try { return new Date(ts).toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" }); } catch { return ""; }
 }
-function ptsJour(d) { return (+d.vmens || 0) * PTS.vmens + (+d.v12 || 0) * PTS.v12 + (+d.autres_pts || 0); }
+function ptsJour(d) { return (+d.vmens || 0) * PTS.vmens + (+d.v12 || 0) * PTS.v12 + (+d.passages || 0) * PTS.passage + (+d.renouv_pts || 0) + (+d.autres_pts || 0); }
 function ventesJour(d) { return (+d.vmens || 0) + (+d.v12 || 0); }
 async function api(corps) {
   const r = await fetch(API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: CODE, ...corps }) });
