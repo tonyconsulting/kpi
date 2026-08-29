@@ -579,6 +579,19 @@ function brancheShell() {
   $("#refresh").onclick = async () => {
     try { await chargeTout(); rendsPage(PAGE); majBadges(); toast("À jour ✔"); } catch { majStatut(false); }
   };
+  // Rafraîchissement silencieux : retour au premier plan + toutes les 5 min.
+  // Jamais sur les pages formulaire (saisie, réglages) ni fiche ouverte, pour ne pas écraser une frappe.
+  const pagesSures = ["jour", "equipe", "historique", "liens"];
+  const rafraichis = async () => {
+    if (document.visibilityState !== "visible") return;
+    if (!pagesSures.includes(PAGE)) return;
+    const ov = $("#ficheOverlay");
+    if (ov && ov.style.display !== "none") return;
+    try { await chargeTout(); rendsPage(PAGE); majBadges(); } catch { majStatut(false); }
+  };
+  document.addEventListener("visibilitychange", rafraichis);
+  setInterval(rafraichis, 5 * 60 * 1000);
+  setInterval(majBadges, 60 * 1000);
 }
 function montreVerrou(msg) {
   $("#splash").style.display = "none";
