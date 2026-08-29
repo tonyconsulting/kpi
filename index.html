@@ -159,6 +159,20 @@
   details.regl[open] > summary::after { content:"\2212"; }
   details.regl[open] > summary { margin-bottom:14px; }
   details.regl div { white-space:normal; padding-top:0; }
+  .wiz-top { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; }
+  .wiz-top input[type=date] { background:var(--raise); border:1px solid var(--line); border-radius:8px; color:var(--muted); padding:6px 8px; font-size:16px; font-family:inherit; }
+  .wiz-count { color:var(--muted); font-size:13px; font-weight:650; flex:none; }
+  .wiz-prog { height:4px; background:var(--raise); border-radius:99px; overflow:hidden; margin-bottom:22px; }
+  .wiz-prog i { display:block; height:100%; background:var(--accent); border-radius:99px; transition:width .25s ease; }
+  .wiz-q { font-size:21px; font-weight:750; color:var(--ink); }
+  .wiz-hint { color:var(--muted); font-size:13.5px; margin-top:4px; }
+  .wiz-in { display:block; width:100%; max-width:220px; margin:20px auto 6px; text-align:center; font-size:44px; font-weight:750; font-family:inherit; color:var(--ink); background:var(--raise); border:1px solid var(--line); border-radius:14px; padding:10px 12px; }
+  .wiz-in:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(167,139,250,.18); }
+  .wiz-pm { display:flex; gap:10px; justify-content:center; margin:10px 0 8px; flex-wrap:wrap; }
+  .wiz-pm button { min-width:62px; min-height:48px; border-radius:12px; border:1px solid var(--line); background:var(--raise); color:var(--ink); font-size:16px; font-weight:700; font-family:inherit; cursor:pointer; }
+  .wiz-pm button:active { background:var(--accent); color:#140b26; border-color:var(--accent); }
+  .wiz-nav { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:20px; }
+  .wiz-rares { margin-top:14px; }
   details.retard { margin-top:26px; }
   details.retard summary { cursor:pointer; color:var(--muted); font-size:13.5px; font-weight:600; padding:10px 0; }
   details.retard[open] summary { color:var(--ink); }
@@ -512,6 +526,6 @@
     <section class="page" id="page-liens"></section>
   </main>
 </div>
-<script src="app.js?v=6"></script>
+<script src="app.js?v=7"></script>
 </body>
 </html>
