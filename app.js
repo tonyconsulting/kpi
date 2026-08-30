@@ -232,7 +232,7 @@ function pagesPour(role) {
   return [["jour", "Ma journée", SVG.jour], ["saisie", "Ma saisie", SVG.saisie], ["kpi", "Mes KPI", SVG.histo]];
 }
 const TITRES = {
-  jour: ["Ma journée", "Ta dose du jour, calculée sur TES chiffres"],
+  jour: ["Ma journée", "Ta to-do du jour, elle se sauvegarde toute seule"],
   saisie: ["Ma saisie du soir", "30 secondes chaque soir, c'est le moteur du mois"],
   historique: ["Historique", "Toutes tes journées de septembre"],
   kpi: ["Mes KPI", "Ta prod perso et tes taux de closing"],
@@ -348,35 +348,126 @@ function histTableHTML(cfg, saisies) {
 }
 
 /* ================== pages membre ================== */
+function lignesJournee(cfg, dz, d) {
+  const type = cfg.type || "fille";
+  if (type === "gars") return [
+    { k: "dms", label: "DMs envoyés", cible: +dz.principal.n || (cfg.plancher_dms || 200) },
+    { k: "fu", label: "Follow-ups", cible: cfg.plancher_fu || 25 },
+    { k: "reponses", label: "Réponses reçues", cible: 0 },
+    { k: "redis", label: "Redirigés", cible: 0 },
+    { k: "settes", label: "Settés", cible: 0 },
+  ];
+  if (type === "leader") return [
+    { k: "vmens", label: "Ventes perso mensuelles", cible: 0 },
+    { k: "v12", label: "Ventes perso 12 mois", cible: 0 },
+    { k: "pts_b1", label: "Relevé branche 1", cible: 0 },
+    { k: "pts_b2", label: "Relevé branche 2", cible: 0 },
+  ];
+  return [
+    { k: "conversations", label: "Conversations ouvertes", cible: +dz.principal.n || 0 },
+    { k: "leads", label: "Leads", cible: 0 },
+    { k: "chauds", label: "Leads chauds", cible: 0 },
+    { k: "contenus", label: "Contenus postés", cible: 0 },
+  ];
+}
+function grapheJoursHTML(cfg, saisies, jour) {
+  const type = cfg.type || "fille";
+  const cle = type === "gars" ? "dms" : type === "leader" ? null : "conversations";
+  const titre = type === "gars" ? "Tes DMs, jour par jour" : type === "leader" ? "Tes ventes perso, jour par jour" : "Tes conversations, jour par jour";
+  const jours = [];
+  const finJ = new Date(jour + "T12:00:00Z");
+  for (let i = 13; i >= 0; i--) {
+    const dd = new Date(finJ); dd.setUTCDate(finJ.getUTCDate() - i);
+    const iso = dd.toISOString().slice(0, 10);
+    if (iso >= "2026-08-25") jours.push(iso);
+  }
+  const valDe = (sx) => { const dx = (sx && sx.d) || {}; return cle ? (+dx[cle] || 0) : (+dx.vmens || 0) + (+dx.v12 || 0); };
+  const vals = jours.map((j) => valDe(saisieDuJour(saisies, j)));
+  const cible = type === "gars" ? (cfg.plancher_dms || 200) : 0;
+  const max = Math.max(cible, ...vals, 1);
+  const H = 106;
+  const barres = jours.map((j, i) => `<div class="gj-col">
+    <i style="height:${Math.max(2, Math.round((vals[i] / max) * H))}px"${cible && vals[i] >= cible ? ' class="full"' : ""}></i>
+    <span>${j.slice(8)}</span></div>`).join("");
+  const ligne = cible ? `<div class="gj-cible" style="bottom:${16 + Math.round((cible / max) * H)}px"></div>` : "";
+  return `<div class="card" style="margin-top:14px"><div class="chart-title">${titre}${cible ? ` (ligne = ton plancher ${cible})` : ""}</div>
+    <div class="gj">${ligne}${barres}</div></div>`;
+}
 function rendsJour(sec, id, cfg, saisies) {
   const { jour } = parisMaintenant();
   const dz = dose(cfg, saisies, jour);
-  const vs = ventesSemaine(saisies, jour);
-  const cibleSem = cfg.ventes_sem || 0;
-  const aRempli = !!saisieDuJour(saisies, jour);
-  const btnSaisie = `<button class="abtn oui" id="allerSaisie" style="width:100%;max-width:640px;padding:14px;margin-top:14px">${aRempli ? "Corriger ma journée" : "Remplir ma journée"}</button>`;
-  const grande = `<div class="card kpi" style="margin-top:14px">
-    <div class="itile">${SVG.flamme}</div>
-    <div class="label">${dz.type === "leader" ? "Tes branches" : "Ta dose du jour"}</div>
-    <div class="value" style="font-size:${dz.type === "leader" ? 30 : 54}px;line-height:1.15"><span style="color:var(--accent)">${esc(dz.principal.n)}</span></div>
-    <div class="hint">${esc(dz.principal.l)}</div>
-  </div>`;
-  const detail = `<details class="regl card" style="margin-top:14px"><summary>Le détail (semaine, ratios)</summary>
-    <div class="grid3" style="margin-top:14px">` +
-    dz.petits.map(([n, l]) => kpiCarteHTML("→", l, esc(String(n)), "")).join("") +
-    (cibleSem ? kpiCarteHTML("🎯", "Ventes cette semaine", `${vs}<span style="font-size:20px;color:var(--muted)"> / ${cibleSem}</span>`, vs >= cibleSem ? "objectif de la semaine atteint ✔" : "l'objectif se joue là", vs < cibleSem) : "") +
-    `</div>` + ratiosHTML(dz) + `</details>`;
-  sec.innerHTML = bandeauHTML(id, saisies) +
-    (aRempli ? "" : btnSaisie) +
-    grande +
+  const sJ = saisieDuJour(saisies, jour);
+  const d = Object.assign({}, (sJ && sJ.d) || {});
+  const lignes = lignesJournee(cfg, dz, d);
+  const fait = (l) => { const x = +d[l.k] || 0; return l.cible ? x >= l.cible : x > 0; };
+  const pctJ = () => Math.round((lignes.filter(fait).length / lignes.length) * 100);
+  const aRempli = !!sJ;
+  const rows = lignes.map((l) => `
+    <div class="todo${fait(l) ? " ok" : ""}" data-k="${l.k}">
+      <span class="tcheck">✓</span>
+      <div class="tlab">${esc(l.label)}${l.cible ? `<span class="tsub">objectif ${l.cible.toLocaleString("fr-FR")}</span>` : ""}</div>
+      <div class="tnum"><button type="button" data-m="-1" aria-label="moins">−</button><input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" value="${d[l.k] != null ? d[l.k] : ""}" placeholder="0" aria-label="${esc(l.label)}"><button type="button" data-m="1" aria-label="plus">+</button></div>
+    </div>`).join("");
+  const grandeLeader = cfg.type === "leader" ? `<div class="card kpi" style="margin-top:14px">
+    <div class="itile">${SVG.flamme}</div><div class="label">Tes branches</div>
+    <div class="value" style="font-size:28px;line-height:1.2"><span style="color:var(--accent)">${esc(dz.principal.n)}</span></div>
+    <div class="hint">${esc(dz.principal.l)}</div></div>` : "";
+  sec.innerHTML = bandeauHTML(id, saisies) + grandeLeader +
+    `<div class="card" style="margin-top:14px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:6px">
+        <div class="chart-title" style="margin:0">Ta journée, remplis en direct</div>
+        <div style="font-weight:750;font-size:20px" id="jPct">${pctJ()} %</div></div>
+      <div class="gbar" id="jBar" style="margin-bottom:10px"><i style="width:${pctJ()}%"></i></div>
+      ${rows}
+      <div class="foot" style="margin-top:10px">Ça se sauvegarde tout seul. Les ventes et ton blocage : bouton en dessous.</div>
+    </div>
+    <button class="abtn oui" id="allerSaisie" style="width:100%;max-width:640px;padding:14px;margin-top:14px">${aRempli ? "Corriger ma journée (ventes + blocage)" : "Finir ma journée (ventes + blocage)"}</button>` +
+    grapheJoursHTML(cfg, saisies, jour) +
     progressionHTML(cfg, dz.t, dz.jr) +
-    (aRempli ? btnSaisie : "") +
-    detail + `<div id="zoneNotifs"></div>`;
+    `<details class="regl card" style="margin-top:14px"><summary>Le détail (semaine, ratios)</summary>
+      <div class="grid3" style="margin-top:14px">` +
+      dz.petits.map(([n, l]) => kpiCarteHTML("→", l, esc(String(n)), "")).join("") +
+      ((cfg.ventes_sem || 0) ? kpiCarteHTML("🎯", "Ventes cette semaine", `${ventesSemaine(saisies, jour)}<span style="font-size:20px;color:var(--muted)"> / ${cfg.ventes_sem}</span>`, "", ventesSemaine(saisies, jour) < cfg.ventes_sem) : "") +
+      `</div>` + ratiosHTML(dz) + `</details><div id="zoneNotifs"></div>`;
   const b = $("#allerSaisie", sec);
   if (b) b.onclick = () => montre("saisie");
   const bv = $("[data-va]", sec);
   if (bv) bv.onclick = () => montre("saisie");
   etatNotifs().then((et) => { const z = $("#zoneNotifs", sec); if (z) { z.innerHTML = notifsCarteHTML(et); brancheNotifs(sec); } });
+  // saisie en direct : maj locale + sauvegarde auto (débounce)
+  let timer = null;
+  const majTete = () => {
+    const p = pctJ();
+    const e1 = $("#jPct", sec); if (e1) e1.textContent = p + " %";
+    const e2 = $("#jBar i", sec); if (e2) e2.style.width = p + "%";
+  };
+  const sauve = () => {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      try {
+        const dd = {};
+        for (const [k] of (CHAMPS_UI[cfg.type || "fille"] || CHAMPS_UI.fille)) {
+          const n = parseInt(d[k], 10);
+          if (!isNaN(n)) dd[k] = n;
+        }
+        await api({ action: "saisie", jour, d: dd, blocage: (sJ && sJ.blocage) || null });
+        const ex = saisieDuJour(SAISIES, jour);
+        if (ex) ex.d = dd;
+        else SAISIES.unshift({ jour, d: dd, blocage: null, maj: new Date().toISOString(), membre_id: MOI.id });
+        majStatut(true); majBadges();
+      } catch (_) { majStatut(false); }
+    }, 900);
+  };
+  for (const row of $$(".todo", sec)) {
+    const l = lignes.find((x) => x.k === row.dataset.k);
+    const inp = $("input", row);
+    const change = () => { d[l.k] = inp.value; row.classList.toggle("ok", fait(l)); majTete(); sauve(); };
+    inp.oninput = change;
+    for (const bt of $$("button", row)) bt.onclick = () => {
+      inp.value = Math.max(0, (parseInt(inp.value, 10) || 0) + parseInt(bt.dataset.m, 10));
+      change();
+    };
+  }
 }
 const RARES = ["vmens", "v12", "autres_pts", "passages", "renouv_pts"];
 function formHTML(cfg, s, jour, prefixe) {
@@ -826,6 +917,8 @@ function brancheShell() {
     // sinon le formulaire garde la date d'hier et écraserait la journée d'hier.
     const nouveauJour = JOUR_RENDU && parisMaintenant().jour !== JOUR_RENDU;
     if (!nouveauJour && (!pagesSures.includes(PAGE) || ficheOuverte())) return;
+    const ac = document.activeElement;
+    if (!nouveauJour && ac && (ac.tagName === "INPUT" || ac.tagName === "TEXTAREA")) return;
     try { await chargeTout(); } catch { majStatut(false); return; }
     // La situation a pu changer pendant le fetch : re-vérifier avant d'écraser le DOM.
     if (!nouveauJour && (!pagesSures.includes(PAGE) || ficheOuverte())) { majBadges(); return; }
