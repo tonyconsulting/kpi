@@ -58,7 +58,7 @@ const SVG = {
   flamme: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.4-.5-2-1-3 1.1-2.2 2.8-3.5 5-4 0 2.5 1.5 3.5 2.5 5a7 7 0 1 1-11.4 3.2"/></svg>',
 };
 
-let CODE = null, MOI = null, PARAMS = {}, MEMBRES = null, SAISIES = [], PAGE = null, JOUR_RENDU = null;
+let CODE = null, MOI = null, PARAMS = {}, MEMBRES = null, SAISIES = [], PAGE = null, JOUR_RENDU = null, PARTIE = "mlm", SOUS_KPI = "prod";
 
 /* ================== utilitaires ================== */
 const $ = (s, r) => (r || document).querySelector(s);
@@ -228,12 +228,14 @@ function pagesPour(role) {
   if (role === "admin") return [
     ["equipe", "Équipe", SVG.equipe], ["reglages", "Réglages", SVG.reglages], ["liens", "Liens", SVG.lien],
   ];
-  return [["jour", "Ma journée", SVG.jour], ["saisie", "Ma saisie", SVG.saisie], ["historique", "Historique", SVG.histo]];
+  return [["jour", "Ma journée", SVG.jour], ["saisie", "Ma saisie", SVG.saisie], ["kpi", "Mes KPI", SVG.histo]];
 }
 const TITRES = {
   jour: ["Ma journée", "Ta dose du jour, calculée sur TES chiffres"],
   saisie: ["Ma saisie du soir", "30 secondes chaque soir, c'est le moteur du mois"],
   historique: ["Historique", "Toutes tes journées de septembre"],
+  kpi: ["Mes KPI", "Ta prod perso et tes taux de closing"],
+  ib: ["Partie IB", "La nouvelle structure arrive"],
   equipe: ["L'équipe", ""],
   reglages: ["Réglages", "Rappel automatique + heure limite, par défaut et par personne"],
   liens: ["Liens personnels", "À distribuer en privé, chacun ne voit que son KPI"],
@@ -245,6 +247,7 @@ function montreNav() {
   for (const b of $$("#nav button")) b.onclick = () => { montre(b.dataset.page); fermeTiroir(); };
 }
 function montre(page) {
+  if (page !== "ib" && PARTIE === "ib") choisitPartie("mlm", true);
   PAGE = page;
   for (const s of $$(".page")) s.classList.remove("on");
   const sec = $("#page-" + page);
@@ -535,6 +538,112 @@ function rendsHistorique(sec, cfg, saisies) {
   sec.innerHTML = histTableHTML(cfg, saisies);
 }
 
+/* ================== onglet KPI (prod perso + closing) ================== */
+function joursEcoules() {
+  const { jour } = parisMaintenant();
+  const a = new Date("2026-08-25T12:00:00Z"), b = new Date(jour + "T12:00:00Z");
+  return Math.max(1, Math.round((b - a) / 86400000) + 1);
+}
+function rendsKpi(sec, cfg, saisies) {
+  const seg = `<div class="agseg" style="display:inline-flex;margin-bottom:16px">
+    <button data-sk="prod" class="${SOUS_KPI === "prod" ? "active" : ""}">Prod perso</button>
+    <button data-sk="closing" class="${SOUS_KPI === "closing" ? "active" : ""}">Closing</button></div>`;
+  sec.innerHTML = seg + (SOUS_KPI === "prod" ? prodPersoHTML(cfg, saisies) : closingHTML(cfg, saisies));
+  for (const b of $$("[data-sk]", sec)) b.onclick = () => { SOUS_KPI = b.dataset.sk; rendsKpi(sec, cfg, saisies); };
+}
+function prodPersoHTML(cfg, saisies) {
+  const t = totaux(saisies);
+  const type = cfg.type || "fille";
+  const jours = saisies.length;
+  const volCle = type === "gars" ? ["dms", "DMs envoyés"] : ["conversations", "Conversations ouvertes"];
+  const tiles =
+    kpiCarteHTML(SVG.flamme, "Points du mois", `<span style="color:var(--accent)">${t._pts.toLocaleString("fr-FR")}</span>`, `sur ${(cfg.cible_pts || 0).toLocaleString("fr-FR")} visés`) +
+    kpiCarteHTML("🎯", "Ventes du mois", String(t._ventes), "mensuelles + 12 mois") +
+    (type === "leader"
+      ? kpiCarteHTML("→", "Points perso", t._pts.toLocaleString("fr-FR"), "hors branches")
+      : kpiCarteHTML("→", volCle[1], String(t[volCle[0]] || 0), "au total ce mois")) +
+    kpiCarteHTML("✍️", "Régularité", `${jours} / ${joursEcoules()}`, "journées remplies depuis le 25 août");
+  return `<div class="grid3">${tiles}</div><h2 style="margin-top:18px">Le détail jour par jour</h2>` + histTableHTML(cfg, saisies);
+}
+function closingHTML(cfg, saisies) {
+  const type = cfg.type || "fille";
+  const t = totaux(saisies);
+  if (type === "leader") {
+    return `<div class="card"><div class="chart-title">Tes taux se mesurent dans tes branches — ici on suit tes ventes perso, semaine par semaine.</div></div>
+      <h2 style="margin-top:18px">Semaine par semaine</h2>` + semainesHTML(cfg, saisies);
+  }
+  const etapes = type === "gars" ? [
+    ["DMs → réponses", t.dms, t.reponses, HYP.gars.rep],
+    ["Réponses → redirigés", t.reponses, t.redis, HYP.gars.redi],
+    ["Redirigés → settés", t.redis, t.settes, HYP.gars.set],
+    ["Settés → ventes — TON CLOSING", t.settes, t._ventes, HYP.gars.close],
+  ] : [
+    ["Conversations → leads", t.conversations, t.leads, HYP.fille.lead],
+    ["Leads → chauds", t.leads, t.chauds, HYP.fille.chaud],
+    ["Chauds → ventes — TON CLOSING", t.chauds, t._ventes, HYP.fille.close],
+  ];
+  const lignes = etapes.map(([label, den, num, hyp]) => {
+    const mesure = (den || 0) > 0 && (num || 0) > 0;
+    const v = mesure ? num / den : hyp;
+    return `<div style="padding:10px 0 2px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
+        <div><div style="font-weight:650;font-size:14.5px">${esc(label)}</div>
+        <div style="color:var(--muted);font-size:12.5px">${mesure ? `${num || 0} sur ${den || 0}` : "hypothèse de départ, pas encore assez de chiffres"}</div></div>
+        <div style="font-size:22px;font-weight:750;color:${mesure ? "var(--accent)" : "var(--muted)"}">${Math.round(v * 100)} %</div>
+      </div>
+      <div class="gbar" style="margin-top:6px"><i style="width:${Math.min(100, Math.round(v * 100))}%"></i></div>
+    </div>`;
+  }).join("");
+  const closeDen = type === "gars" ? (t.settes || 0) : (t.chauds || 0);
+  const closeOk = closeDen > 0 && t._ventes > 0;
+  const volTotal = type === "gars" ? (t.dms || 0) : (t.conversations || 0);
+  const convOk = volTotal > 0 && t._ventes > 0;
+  const global = `<div class="grid3" style="margin-bottom:14px">` +
+    kpiCarteHTML(SVG.flamme, "Ton taux de closing", closeOk ? `<span style="color:var(--accent)">${Math.round((t._ventes / closeDen) * 100)} %</span>` : "—",
+      closeOk ? `${t._ventes} vente${t._ventes > 1 ? "s" : ""} sur ${closeDen} ${type === "gars" ? "settés" : "chauds"}` : "pas encore assez de chiffres") +
+    kpiCarteHTML("→", "Conversion totale", convOk ? `${(Math.round((t._ventes / volTotal) * 1000) / 10).toLocaleString("fr-FR")} %` : "—",
+      type === "gars" ? "des DMs à la vente" : "de la conversation à la vente") +
+    `</div>`;
+  return global + `<div class="card">${lignes}</div><h2 style="margin-top:18px">Semaine par semaine</h2>` + semainesHTML(cfg, saisies);
+}
+function semainesHTML(cfg, saisies) {
+  if (!saisies.length) return `<div class="empty"><b>Rien pour l'instant</b>Tes taux apparaîtront dès tes premières saisies.</div>`;
+  const type = cfg.type || "fille";
+  const sem = {};
+  for (const s of saisies) {
+    const d = new Date(s.jour + "T12:00:00Z");
+    const lundi = new Date(d); lundi.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+    const cle = lundi.toISOString().slice(0, 10);
+    (sem[cle] = sem[cle] || []).push(s);
+  }
+  const cols = type === "gars" ? [["dms", "DMs"], ["settes", "Settés"]]
+    : type === "leader" ? [["vmens", "V. mens"], ["v12", "V. 12m"]]
+    : [["conversations", "Conv."], ["chauds", "Chauds"]];
+  const lignes = Object.keys(sem).sort().reverse().map((k) => {
+    const t = totaux(sem[k]);
+    const den = type === "gars" ? (t.settes || 0) : type === "leader" ? 0 : (t.chauds || 0);
+    const taux = den > 0 && t._ventes > 0 ? Math.round((t._ventes / den) * 100) + " %" : "—";
+    return `<tr><td><b>Sem. du ${esc(joliJour(k))}</b></td>${cols.map(([c]) => `<td class="num">${t[c] || 0}</td>`).join("")}
+      <td class="num">${t._ventes}</td><td class="num">${t._pts.toLocaleString("fr-FR")}</td><td class="num"><b>${taux}</b></td></tr>`;
+  }).join("");
+  return `<div class="tscroll"><table><thead><tr><th>Semaine</th>${cols.map(([, l]) => `<th class="num">${esc(l)}</th>`).join("")}<th class="num">Ventes</th><th class="num">Pts</th><th class="num">Closing</th></tr></thead><tbody>${lignes}</tbody></table></div>`;
+}
+
+/* ================== partie IB (switch + placeholder) ================== */
+function choisitPartie(p, sansNav) {
+  PARTIE = p;
+  document.body.classList.toggle("ib", p === "ib");
+  for (const b of $$("#partieSwitch button")) b.classList.toggle("active", b.dataset.partie === p);
+  if (!sansNav) montre(p === "ib" ? "ib" : "jour");
+}
+function rendsIB(sec) {
+  sec.innerHTML = `<div class="card ib-hero">
+    <div class="logo-ib">PARTIE <span>IB</span></div>
+    <div class="ib-dots"><i></i><i></i><i></i></div>
+    <div style="color:var(--muted);font-size:15px;max-width:420px;margin:0 auto">On branche la nouvelle structure. Tes stats IB tomberont ici, même interface que le MLM.</div>
+  </div>`;
+}
+
 /* ================== pages admin ================== */
 function rendsEquipe(sec) {
   const { jour, heure } = parisMaintenant();
@@ -684,6 +793,8 @@ function rendsPage(page) {
     if (page === "jour") rendsJour(sec, MOI.id, MOI.cfg, SAISIES);
     if (page === "saisie") rendsSaisie(sec, MOI.id, MOI.cfg, SAISIES);
     if (page === "historique") rendsHistorique(sec, MOI.cfg, SAISIES);
+    if (page === "kpi") rendsKpi(sec, MOI.cfg, SAISIES);
+    if (page === "ib") rendsIB(sec);
   }
   $("#pageSub").textContent = page === "equipe" ? sousTitreEquipe() : (TITRES[page] || ["", ""])[1];
 }
@@ -758,6 +869,14 @@ function montreVerrou(msg, retry) {
   $("#unom").textContent = MOI.prenom;
   $("#urole").textContent = MOI.role === "admin" ? "Admin" : "Membre";
   if (MOI.role === "admin") $("#footMotto").textContent = "Le rouge se règle le soir même, jamais le lendemain.";
+  if (MOI.role !== "admin" && MOI.cfg && MOI.cfg.ib) {
+    const sw = $("#partieSwitch");
+    sw.style.display = "inline-flex";
+    for (const b of $$("button", sw)) {
+      b.classList.toggle("active", b.dataset.partie === "mlm");
+      b.onclick = () => choisitPartie(b.dataset.partie);
+    }
+  }
   brancheShell();
   montreNav();
   const pm0 = parisMaintenant();
