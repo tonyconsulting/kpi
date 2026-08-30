@@ -385,28 +385,47 @@ function lignesJournee(cfg, dz, d) {
     { k: "contenus", label: "Contenus postés", cible: 0 },
   ];
 }
-function grapheJoursHTML(cfg, saisies, jour) {
+function pctJourDe(cfg, dx) {
   const type = cfg.type || "fille";
-  const cle = type === "gars" ? "dms" : type === "leader" ? null : "conversations";
-  const titre = type === "gars" ? "Tes DMs, jour par jour" : type === "leader" ? "Tes ventes perso, jour par jour" : "Tes conversations, jour par jour";
+  const lignes = type === "gars"
+    ? [["dms", cfg.plancher_dms || 200], ["fu", cfg.plancher_fu || 25], ["reponses", 0], ["redis", 0], ["settes", 0]]
+    : type === "leader" ? [["vmens", 0], ["v12", 0], ["pts_b1", 0], ["pts_b2", 0]]
+    : [["conversations", 0], ["leads", 0], ["chauds", 0], ["contenus", 0]];
+  const ok = lignes.filter(([k, c]) => c ? (+dx[k] || 0) >= c : (+dx[k] || 0) > 0).length;
+  return Math.round((ok / lignes.length) * 100);
+}
+function grapheCourbeHTML(cfg, saisies, jour) {
   const jours = [];
   const finJ = new Date(jour + "T12:00:00Z");
-  for (let i = 13; i >= 0; i--) {
+  for (let i = 29; i >= 0; i--) {
     const dd = new Date(finJ); dd.setUTCDate(finJ.getUTCDate() - i);
     const iso = dd.toISOString().slice(0, 10);
     if (iso >= "2026-08-25") jours.push(iso);
   }
-  const valDe = (sx) => { const dx = (sx && sx.d) || {}; return cle ? (+dx[cle] || 0) : (+dx.vmens || 0) + (+dx.v12 || 0); };
-  const vals = jours.map((j) => valDe(saisieDuJour(saisies, j)));
-  const cible = type === "gars" ? (cfg.plancher_dms || 200) : 0;
-  const max = Math.max(cible, ...vals, 1);
-  const H = 86;
-  const barres = jours.map((j, i) => `<div class="gj-col">
-    <i style="height:${Math.max(2, Math.round((vals[i] / max) * H))}px"${cible && vals[i] >= cible ? ' class="full"' : ""}></i>
-    <span>${j.slice(8)}</span></div>`).join("");
-  const ligne = cible ? `<div class="gj-cible" style="bottom:${16 + Math.round((cible / max) * H)}px"></div>` : "";
-  return `<div class="sec-t">14 derniers jours<span>${esc(titre.replace("Tes ", "").replace(", jour par jour", ""))}${cible ? " · ligne = plancher " + cible : ""}</span></div>
-    <div class="gj">${ligne}${barres}</div>`;
+  const vals = jours.map((j) => { const sx = saisieDuJour(saisies, j); return sx ? pctJourDe(cfg, sx.d || {}) : 0; });
+  const W = 600, H = 150, PG = 34, PB = 18, PH = 10;
+  const iw = W - PG - 8, ih = H - PB - PH;
+  const n = jours.length;
+  const X = (i) => PG + (n === 1 ? iw / 2 : (i / (n - 1)) * iw);
+  const Y = (v) => PH + (1 - v / 100) * ih;
+  const pts = vals.map((v, i) => [X(i), Y(v)]);
+  let ligne = `M ${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`;
+  for (let i = 1; i < n; i++) {
+    const mx = ((pts[i - 1][0] + pts[i][0]) / 2).toFixed(1), my = ((pts[i - 1][1] + pts[i][1]) / 2).toFixed(1);
+    ligne += ` Q ${pts[i - 1][0].toFixed(1)} ${pts[i - 1][1].toFixed(1)} ${mx} ${my}`;
+  }
+  ligne += ` L ${pts[n - 1][0].toFixed(1)} ${pts[n - 1][1].toFixed(1)}`;
+  const aire = ligne + ` L ${pts[n - 1][0].toFixed(1)} ${Y(0).toFixed(1)} L ${pts[0][0].toFixed(1)} ${Y(0).toFixed(1)} Z`;
+  const grilles = [0, 50, 100].map((v) => `<line x1="${PG}" x2="${W - 8}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="currentColor" opacity="0.08"/><text x="${PG - 7}" y="${(Y(v) + 3).toFixed(1)}" text-anchor="end" font-size="9.5" fill="currentColor" opacity="0.5">${v}%</text>`).join("");
+  const pas = Math.max(1, Math.ceil(n / 7));
+  const datesX = jours.map((j, i) => (i % pas === 0 || i === n - 1) ? `<text x="${X(i).toFixed(1)}" y="${H - 4}" text-anchor="middle" font-size="9.5" fill="currentColor" opacity="0.5">${j.slice(8, 10)}/${j.slice(5, 7)}</text>` : "").join("");
+  return `<div class="sec-t">Ta courbe<span>% de ta journée faite, jour par jour</span></div>
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;color:var(--muted)" role="img" aria-label="Courbe de tes journées">
+      ${grilles}${datesX}
+      <path d="${aire}" fill="var(--accent)" opacity="0.12"/>
+      <path d="${ligne}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="${pts[n - 1][0].toFixed(1)}" cy="${pts[n - 1][1].toFixed(1)}" r="3.5" fill="var(--accent)"/>
+    </svg>`;
 }
 function rendsJour(sec, id, cfg, saisies) {
   const { jour } = parisMaintenant();
@@ -439,7 +458,7 @@ function rendsJour(sec, id, cfg, saisies) {
     <div class="tlist">${rows}</div>
     <div class="jsave" id="jSave"></div>
     <button class="qbtn" id="allerSaisie">${sJ ? "Corriger ma journée (ventes + blocage)" : "Finir ma journée (ventes + blocage)"}</button>
-    ${grapheJoursHTML(cfg, saisies, jour)}
+    ${grapheCourbeHTML(cfg, saisies, jour)}
     <div class="sec-t">Progression du mois<span class="eur" style="letter-spacing:0;text-transform:none;font-size:13px">${(cfg.objectif_eur || 0).toLocaleString("fr-FR")} €</span></div>
     <div class="pline"><b>${t._pts.toLocaleString("fr-FR")}</b> / ${(cfg.cible_pts || 0).toLocaleString("fr-FR")} points · ${pctPts} % · ${dz.jr} jour${dz.jr > 1 ? "s" : ""} restant${dz.jr > 1 ? "s" : ""}</div>
     <div class="tbar big"><i style="width:${pctPts}%"></i></div>
