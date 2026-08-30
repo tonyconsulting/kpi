@@ -686,19 +686,21 @@ function rendsAssistant(sec, cfg, jourInit) {
       const g = GROUPES[e.genre];
       const cles = clesDe(g);
       const aDes = cles.some((k) => +vals[k] > 0);
-      if (!aDes && !e.ouvert) {
-        corps = `<div class="wiz-q">${g.titre}</div><div class="wiz-hint">${g.hint}</div>
+      const signesN = e.genre === "ventes" ? (parseInt(vals.signes, 10) || 0) : 0;
+      const hint = signesN > 0 ? `Tu as marqué ${signesN} client${signesN > 1 ? "s" : ""} signé${signesN > 1 ? "s" : ""} : place chaque démarrage dans la branche où il a eu lieu.` : g.hint;
+      if (!aDes && !signesN && !e.ouvert) {
+        corps = `<div class="wiz-q">${g.titre}</div><div class="wiz-hint">${hint}</div>
           <div class="wiz-choix">
             <button type="button" class="abtn" id="wNon">Non, rien</button>
             <button type="button" class="abtn oui" id="wOui">Oui</button>
           </div>` + nav(false);
       } else if (g.liste) {
-        corps = `<div class="wiz-q">${g.titre.replace(" ?", "")}</div><div class="wiz-hint">${g.hint}</div>
+        corps = `<div class="wiz-q">${g.titre.replace(" ?", "")}</div><div class="wiz-hint">${hint}</div>
           <div class="wiz-rares">` + g.liste.map(([k, label, aide]) => `
             <div class="field"><label for="w_${k}">${esc(label)}${aide ? ` · <span style="color:var(--muted)">${esc(aide)}</span>` : ""}</label>
             ${inT(k, vals[k])}</div>`).join("") + `</div>` + nav(true);
       } else {
-        corps = `<div class="wiz-q">${g.titre.replace(" ?", "")}</div><div class="wiz-hint">${g.hint}</div>
+        corps = `<div class="wiz-q">${g.titre.replace(" ?", "")}</div><div class="wiz-hint">${hint}</div>
           <div class="vgrid"><span></span><span class="vgh">Branche 1</span><span class="vgh">Branche 2</span>` +
           g.grille.map(([k1, k2, lab, aide]) => `<span class="vgl">${esc(lab)}${aide ? `<i>${esc(aide)}</i>` : ""}</span>${inT(k1, vals[k1])}${inT(k2, vals[k2])}`).join("") +
           `</div>` + nav(true);
