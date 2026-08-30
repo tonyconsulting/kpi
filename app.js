@@ -85,6 +85,14 @@ const SVG = {
 let CODE = null, MOI = null, PARAMS = {}, MEMBRES = null, SAISIES = [], PAGE = null, JOUR_RENDU = null, PARTIE = "mlm", SOUS_KPI = "prod";
 let FLUSH_JOUR = null, BEACON_JOUR = null;
 window.addEventListener("pagehide", () => { if (BEACON_JOUR) BEACON_JOUR(); });
+document.addEventListener("focusin", (e) => {
+  const t = e.target;
+  if (t && t.tagName === "INPUT" && t.hasAttribute("data-ro")) setTimeout(() => t.removeAttribute("readonly"), 0);
+});
+document.addEventListener("focusout", (e) => {
+  const t = e.target;
+  if (t && t.tagName === "INPUT" && t.hasAttribute("data-ro")) t.setAttribute("readonly", "");
+});
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden" && BEACON_JOUR) BEACON_JOUR(); });
 
 /* ================== utilitaires ================== */
@@ -468,7 +476,7 @@ function rendsJour(sec, id, cfg, saisies) {
     <div class="todo${fait(l) ? " ok" : ""}" data-k="${l.k}">
       <span class="tcheck">✓</span>
       <div class="tlab">${esc(l.label)}${l.cible ? `<span class="tsub">objectif ${l.cible.toLocaleString("fr-FR")}</span>` : ""}</div>
-      <div class="tnum"><button type="button" data-m="-1" aria-label="moins">−</button><input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" name="x_${l.k}" value="${d[l.k] != null ? d[l.k] : ""}" placeholder="0" aria-label="${esc(l.label)}"><button type="button" data-m="1" aria-label="plus">+</button></div>
+      <div class="tnum"><button type="button" data-m="-1" aria-label="moins">−</button><input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" readonly data-ro="1" name="x_${l.k}" value="${d[l.k] != null ? d[l.k] : ""}" placeholder="0" aria-label="${esc(l.label)}"><button type="button" data-m="1" aria-label="plus">+</button></div>
     </div>`).join("");
   const t = dz.t;
   const pctPts = Math.min(100, Math.round((t._pts / (cfg.cible_pts || 1)) * 100));
@@ -575,7 +583,7 @@ function formHTML(cfg, s, jour, prefixe) {
     for (let i = 0; i < liste.length; i += 2) {
       const paire = liste.slice(i, i + 2).map(([k, label, aide]) => `
       <div class="field"><label for="${prefixe}_${k}">${esc(label)}${aide ? ` — <span style="color:var(--muted)">${esc(aide)}</span>` : ""}</label>
-      <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" name="x_${k}" id="${prefixe}_${k}" value="${d[k] != null ? d[k] : ""}" placeholder="0"></div>`).join("");
+      <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" readonly data-ro="1" name="x_${k}" id="${prefixe}_${k}" value="${d[k] != null ? d[k] : ""}" placeholder="0"></div>`).join("");
       rangs.push(`<div class="row2">${paire}</div>`);
     }
     return rangs.join("");
@@ -643,7 +651,7 @@ function etapesDe(type) {
 function rendsAssistant(sec, cfg, jourInit) {
   const type = cfg.type || "fille";
   const { quot, rares, calls } = etapesDe(type);
-  const inT = (k, v) => `<input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" name="x_${k}" id="w_${k}" value="${v != null ? v : ""}" placeholder="0" aria-label="${k}">`;
+  const inT = (k, v) => `<input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" readonly data-ro="1" name="x_${k}" id="w_${k}" value="${v != null ? v : ""}" placeholder="0" aria-label="${k}">`;
   const GROUPES = type === "leader" ? { ventes: { titre: "Des ventes aujourd'hui ?", hint: "Laisse vide si rien.", liste: rares } } : {
     calls: { titre: "Des calls aujourd'hui ?", hint: "Closings, R2, shows, clients signés.", liste: calls },
     ventes: { titre: "Des ventes aujourd'hui ?", hint: "Mets chaque démarrage dans la branche où il a eu lieu.",
@@ -675,7 +683,7 @@ function rendsAssistant(sec, cfg, jourInit) {
     if (e.genre === "num") {
       const [k, label, aide] = e.c;
       corps = `<div class="wiz-q">${esc(label)}</div>${aide ? `<div class="wiz-hint">${esc(aide)}</div>` : ""}
-        <input class="wiz-in" id="wVal" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" name="x_${k}" value="${vals[k] != null ? vals[k] : ""}" placeholder="0">
+        <input class="wiz-in" id="wVal" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" readonly data-ro="1" name="x_${k}" value="${vals[k] != null ? vals[k] : ""}" placeholder="0">
         <div class="wiz-pm">
           <button type="button" data-pm="-1">−1</button>
           <button type="button" data-pm="1">+1</button>
