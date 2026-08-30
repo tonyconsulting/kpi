@@ -348,6 +348,17 @@ function histTableHTML(cfg, saisies) {
 }
 
 /* ================== pages membre ================== */
+function statHTML(label, valeur, extra) {
+  return `<div class="stat"><span class="sl">${esc(label)}</span><span class="sv">${valeur}</span>${extra ? `<span class="sh">${esc(extra)}</span>` : ""}</div>`;
+}
+function bandeauZenHTML(id, saisies) {
+  const { jour, heure } = parisMaintenant();
+  const sx = saisieDuJour(saisies, jour);
+  const lim = heureLimite(id);
+  if (sx) return `<div class="jligne ok">✓ Journée du ${esc(joliJour(jour))} remplie${sx.maj ? " à " + esc(joliHeure(sx.maj)) : ""}</div>`;
+  if (heure >= lim) return `<div class="jligne tard" data-va="1">Il est plus de ${esc(lim)} et ta journée n'est pas remplie</div>`;
+  return `<div class="jligne" data-va="1">Journée du ${esc(joliJour(jour))} · à remplir avant ${esc(lim)}</div>`;
+}
 function lignesJournee(cfg, dz, d) {
   const type = cfg.type || "fille";
   if (type === "gars") return [
@@ -385,13 +396,13 @@ function grapheJoursHTML(cfg, saisies, jour) {
   const vals = jours.map((j) => valDe(saisieDuJour(saisies, j)));
   const cible = type === "gars" ? (cfg.plancher_dms || 200) : 0;
   const max = Math.max(cible, ...vals, 1);
-  const H = 106;
+  const H = 86;
   const barres = jours.map((j, i) => `<div class="gj-col">
     <i style="height:${Math.max(2, Math.round((vals[i] / max) * H))}px"${cible && vals[i] >= cible ? ' class="full"' : ""}></i>
     <span>${j.slice(8)}</span></div>`).join("");
   const ligne = cible ? `<div class="gj-cible" style="bottom:${16 + Math.round((cible / max) * H)}px"></div>` : "";
-  return `<div class="card" style="margin-top:14px"><div class="chart-title">${titre}${cible ? ` (ligne = ton plancher ${cible})` : ""}</div>
-    <div class="gj">${ligne}${barres}</div></div>`;
+  return `<div class="sec-t">14 derniers jours<span>${esc(titre.replace("Tes ", "").replace(", jour par jour", ""))}${cible ? " · ligne = plancher " + cible : ""}</span></div>
+    <div class="gj">${ligne}${barres}</div>`;
 }
 function rendsJour(sec, id, cfg, saisies) {
   const { jour } = parisMaintenant();
@@ -401,40 +412,39 @@ function rendsJour(sec, id, cfg, saisies) {
   const lignes = lignesJournee(cfg, dz, d);
   const fait = (l) => { const x = +d[l.k] || 0; return l.cible ? x >= l.cible : x > 0; };
   const pctJ = () => Math.round((lignes.filter(fait).length / lignes.length) * 100);
-  const aRempli = !!sJ;
   const rows = lignes.map((l) => `
     <div class="todo${fait(l) ? " ok" : ""}" data-k="${l.k}">
       <span class="tcheck">✓</span>
       <div class="tlab">${esc(l.label)}${l.cible ? `<span class="tsub">objectif ${l.cible.toLocaleString("fr-FR")}</span>` : ""}</div>
       <div class="tnum"><button type="button" data-m="-1" aria-label="moins">−</button><input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" value="${d[l.k] != null ? d[l.k] : ""}" placeholder="0" aria-label="${esc(l.label)}"><button type="button" data-m="1" aria-label="plus">+</button></div>
     </div>`).join("");
-  const grandeLeader = cfg.type === "leader" ? `<div class="card kpi" style="margin-top:14px">
-    <div class="itile">${SVG.flamme}</div><div class="label">Tes branches</div>
-    <div class="value" style="font-size:28px;line-height:1.2"><span style="color:var(--accent)">${esc(dz.principal.n)}</span></div>
-    <div class="hint">${esc(dz.principal.l)}</div></div>` : "";
-  sec.innerHTML = bandeauHTML(id, saisies) + grandeLeader +
-    `<div class="card" style="margin-top:14px">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:6px">
-        <div class="chart-title" style="margin:0">Ta journée, remplis en direct</div>
-        <div style="font-weight:750;font-size:20px" id="jPct">${pctJ()} %</div></div>
-      <div class="gbar" id="jBar" style="margin-bottom:10px"><i style="width:${pctJ()}%"></i></div>
-      ${rows}
-      <div class="foot" style="margin-top:10px">Ça se sauvegarde tout seul. Les ventes et ton blocage : bouton en dessous.</div>
-    </div>
-    <button class="abtn oui" id="allerSaisie" style="width:100%;max-width:640px;padding:14px;margin-top:14px">${aRempli ? "Corriger ma journée (ventes + blocage)" : "Finir ma journée (ventes + blocage)"}</button>` +
-    grapheJoursHTML(cfg, saisies, jour) +
-    progressionHTML(cfg, dz.t, dz.jr) +
-    `<details class="regl card" style="margin-top:14px"><summary>Le détail (semaine, ratios)</summary>
-      <div class="grid3" style="margin-top:14px">` +
-      dz.petits.map(([n, l]) => kpiCarteHTML("→", l, esc(String(n)), "")).join("") +
-      ((cfg.ventes_sem || 0) ? kpiCarteHTML("🎯", "Ventes cette semaine", `${ventesSemaine(saisies, jour)}<span style="font-size:20px;color:var(--muted)"> / ${cfg.ventes_sem}</span>`, "", ventesSemaine(saisies, jour) < cfg.ventes_sem) : "") +
-      `</div>` + ratiosHTML(dz) + `</details><div id="zoneNotifs"></div>`;
+  const t = dz.t;
+  const pctPts = Math.min(100, Math.round((t._pts / (cfg.cible_pts || 1)) * 100));
+  const branches = cfg.type === "leader" ? `<div class="sec-t">Tes branches</div>
+    <div class="pline"><b style="color:var(--accent)">${esc(dz.principal.n)}</b> ${esc(dz.principal.l)}</div>` : "";
+  sec.innerHTML = `<div class="zen">
+    ${bandeauZenHTML(id, saisies)}
+    ${branches}
+    <div class="sec-t">Aujourd'hui<span id="jPct">${pctJ()} %</span></div>
+    <div class="tbar" id="jBar"><i style="width:${pctJ()}%"></i></div>
+    <div class="tlist">${rows}</div>
+    <button class="qbtn" id="allerSaisie">${sJ ? "Corriger ma journée (ventes + blocage)" : "Finir ma journée (ventes + blocage)"}</button>
+    ${grapheJoursHTML(cfg, saisies, jour)}
+    <div class="sec-t">Progression du mois<span class="eur" style="letter-spacing:0;text-transform:none;font-size:13px">${(cfg.objectif_eur || 0).toLocaleString("fr-FR")} €</span></div>
+    <div class="pline"><b>${t._pts.toLocaleString("fr-FR")}</b> / ${(cfg.cible_pts || 0).toLocaleString("fr-FR")} points · ${pctPts} % · ${dz.jr} jour${dz.jr > 1 ? "s" : ""} restant${dz.jr > 1 ? "s" : ""}</div>
+    <div class="tbar big"><i style="width:${pctPts}%"></i></div>
+    <details class="regl" style="margin-top:26px"><summary>Le détail (semaine, ratios)</summary>
+      <div class="stats" style="margin:14px 0 6px">` +
+      dz.petits.map(([n, l]) => statHTML(l, esc(String(n)))).join("") +
+      ((cfg.ventes_sem || 0) ? statHTML("Ventes cette semaine", `${ventesSemaine(saisies, jour)} <span class="sh">/ ${cfg.ventes_sem}</span>`) : "") +
+      `</div>` + ratiosHTML(dz) + `</details>
+    <div id="zoneNotifs"></div>
+  </div>`;
   const b = $("#allerSaisie", sec);
   if (b) b.onclick = () => montre("saisie");
   const bv = $("[data-va]", sec);
   if (bv) bv.onclick = () => montre("saisie");
   etatNotifs().then((et) => { const z = $("#zoneNotifs", sec); if (z) { z.innerHTML = notifsCarteHTML(et); brancheNotifs(sec); } });
-  // saisie en direct : maj locale + sauvegarde auto (débounce)
   let timer = null;
   const majTete = () => {
     const p = pctJ();
@@ -581,13 +591,13 @@ function rendsAssistant(sec, cfg, jourInit) {
         <div class="field" style="margin-top:14px"><textarea id="wBlocage" maxlength="500" placeholder="ex : plein de leads mais personne veut le call…">${esc(blocage)}</textarea></div>
         <button type="button" class="submit" id="wSave" style="margin-top:14px">Enregistrer ma journée</button>` + nav(false);
     }
-    sec.innerHTML = `<div class="card wiz" style="max-width:640px">
+    sec.innerHTML = `<div class="zen"><div class="wiz">
       <div class="wiz-top">
         <input type="date" id="wJour" value="${jour}" min="2026-08-25" max="2026-12-31" aria-label="Jour">
         <span class="wiz-count">${i + 1} / ${total}</span>
       </div>
       <div class="wiz-prog"><i style="width:${Math.round(((i + 1) / total) * 100)}%"></i></div>
-      ${corps}</div>`;
+      ${corps}</div></div>`;
     const garde = () => {
       const e2 = etapes[i];
       if (e2.genre === "num") { const el = $("#wVal", sec); if (el) vals[e2.c[0]] = el.value; }
@@ -620,7 +630,6 @@ function rendsAssistant(sec, cfg, jourInit) {
         try { navigator.clearAppBadge && navigator.clearAppBadge(); } catch (_) {}
         await chargeTout();
         montre("jour");
-        const g = $("#page-jour .gbar"); if (g) g.closest(".card").classList.add("flashG");
       } catch (err) { toast("Erreur : " + err.message, true); busy(sv, false); }
     };
   };
@@ -637,32 +646,30 @@ function joursEcoules() {
   return Math.max(1, Math.round((b - a) / 86400000) + 1);
 }
 function rendsKpi(sec, cfg, saisies) {
-  const seg = `<div class="agseg" style="display:inline-flex;margin-bottom:16px">
+  const seg = `<div class="agseg" style="display:inline-flex;margin-bottom:8px">
     <button data-sk="prod" class="${SOUS_KPI === "prod" ? "active" : ""}">Prod perso</button>
     <button data-sk="closing" class="${SOUS_KPI === "closing" ? "active" : ""}">Closing</button></div>`;
-  sec.innerHTML = seg + (SOUS_KPI === "prod" ? prodPersoHTML(cfg, saisies) : closingHTML(cfg, saisies));
+  sec.innerHTML = `<div class="zen">` + seg + (SOUS_KPI === "prod" ? prodPersoHTML(cfg, saisies) : closingHTML(cfg, saisies)) + `</div>`;
   for (const b of $$("[data-sk]", sec)) b.onclick = () => { SOUS_KPI = b.dataset.sk; rendsKpi(sec, cfg, saisies); };
 }
 function prodPersoHTML(cfg, saisies) {
   const t = totaux(saisies);
   const type = cfg.type || "fille";
   const jours = saisies.length;
-  const volCle = type === "gars" ? ["dms", "DMs envoyés"] : ["conversations", "Conversations ouvertes"];
-  const tiles =
-    kpiCarteHTML(SVG.flamme, "Points du mois", `<span style="color:var(--accent)">${t._pts.toLocaleString("fr-FR")}</span>`, `sur ${(cfg.cible_pts || 0).toLocaleString("fr-FR")} visés`) +
-    kpiCarteHTML("🎯", "Ventes du mois", String(t._ventes), "mensuelles + 12 mois") +
-    (type === "leader"
-      ? kpiCarteHTML("→", "Points perso", t._pts.toLocaleString("fr-FR"), "hors branches")
-      : kpiCarteHTML("→", volCle[1], String(t[volCle[0]] || 0), "au total ce mois")) +
-    kpiCarteHTML("✍️", "Régularité", `${jours} / ${joursEcoules()}`, "journées remplies depuis le 25 août");
-  return `<div class="grid3">${tiles}</div><h2 style="margin-top:18px">Le détail jour par jour</h2>` + histTableHTML(cfg, saisies);
+  const volCle = type === "gars" ? ["dms", "DMs envoyés"] : ["conversations", "Conversations"];
+  return `<div class="sec-t">Ce mois</div><div class="stats">` +
+    statHTML("Points", `<span style="color:var(--accent)">${t._pts.toLocaleString("fr-FR")}</span>`, `/ ${(cfg.cible_pts || 0).toLocaleString("fr-FR")}`) +
+    statHTML("Ventes", String(t._ventes)) +
+    (type === "leader" ? statHTML("Points perso", t._pts.toLocaleString("fr-FR")) : statHTML(volCle[1], String(t[volCle[0]] || 0))) +
+    statHTML("Régularité", `${jours}`, `/ ${joursEcoules()} jours`) +
+    `</div><div class="sec-t">Jour par jour</div>` + histTableHTML(cfg, saisies);
 }
 function closingHTML(cfg, saisies) {
   const type = cfg.type || "fille";
   const t = totaux(saisies);
   if (type === "leader") {
-    return `<div class="card"><div class="chart-title">Tes taux se mesurent dans tes branches — ici on suit tes ventes perso, semaine par semaine.</div></div>
-      <h2 style="margin-top:18px">Semaine par semaine</h2>` + semainesHTML(cfg, saisies);
+    return `<div class="pline" style="margin-top:14px">Tes taux se mesurent dans tes branches. Ici : tes ventes perso, semaine par semaine.</div>
+      <div class="sec-t">Semaine par semaine</div>` + semainesHTML(cfg, saisies);
   }
   const etapes = type === "gars" ? [
     ["DMs → réponses", t.dms, t.reponses, HYP.gars.rep],
@@ -690,13 +697,13 @@ function closingHTML(cfg, saisies) {
   const closeOk = closeDen > 0 && t._ventes > 0;
   const volTotal = type === "gars" ? (t.dms || 0) : (t.conversations || 0);
   const convOk = volTotal > 0 && t._ventes > 0;
-  const global = `<div class="grid3" style="margin-bottom:14px">` +
-    kpiCarteHTML(SVG.flamme, "Ton taux de closing", closeOk ? `<span style="color:var(--accent)">${Math.round((t._ventes / closeDen) * 100)} %</span>` : "—",
-      closeOk ? `${t._ventes} vente${t._ventes > 1 ? "s" : ""} sur ${closeDen} ${type === "gars" ? "settés" : "chauds"}` : "pas encore assez de chiffres") +
-    kpiCarteHTML("→", "Conversion totale", convOk ? `${(Math.round((t._ventes / volTotal) * 1000) / 10).toLocaleString("fr-FR")} %` : "—",
-      type === "gars" ? "des DMs à la vente" : "de la conversation à la vente") +
+  const global = `<div class="sec-t">Tes taux</div><div class="stats" style="margin-bottom:8px">` +
+    statHTML("Taux de closing", closeOk ? `<span style="color:var(--accent)">${Math.round((t._ventes / closeDen) * 100)} %</span>` : "—",
+      closeOk ? `${t._ventes} / ${closeDen} ${type === "gars" ? "settés" : "chauds"}` : "pas assez de chiffres") +
+    statHTML("Conversion totale", convOk ? `${(Math.round((t._ventes / volTotal) * 1000) / 10).toLocaleString("fr-FR")} %` : "—",
+      type === "gars" ? "des DMs à la vente" : "de la conv. à la vente") +
     `</div>`;
-  return global + `<div class="card">${lignes}</div><h2 style="margin-top:18px">Semaine par semaine</h2>` + semainesHTML(cfg, saisies);
+  return global + lignes + `<div class="sec-t">Semaine par semaine</div>` + semainesHTML(cfg, saisies);
 }
 function semainesHTML(cfg, saisies) {
   if (!saisies.length) return `<div class="empty"><b>Rien pour l'instant</b>Tes taux apparaîtront dès tes premières saisies.</div>`;
