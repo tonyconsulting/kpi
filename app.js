@@ -11,6 +11,7 @@ const TRIPLES = {
   v12: ["v12", "v12_b1", "v12_b2"],
   autres: ["autres_pts", "autres_b1", "autres_b2"],
   renouv: ["renouv_pts", "renouv_b1", "renouv_b2"],
+  passages: ["passages", "passages_b1", "passages_b2"],
 };
 function totBase(d, b) { return TRIPLES[b].reduce((a, k) => a + (+d[k] || 0), 0); }
 const HYP = { fille: { lead: 0.5, chaud: 0.5, close: 1 / 3 }, gars: { rep: 0.34, redi: 0.42, set: 0.5, close: 1 / 3 } };
@@ -30,7 +31,8 @@ const CHAMPS_UI = {
     ["autres_b2", "Autres packs · branche 2 (pts)", ""],
     ["renouv_b1", "Renouvellements · branche 1 (pts)", "m2 95 · m3 85 · m4 75 · m5 65 · m6+ 50"],
     ["renouv_b2", "Renouvellements · branche 2 (pts)", ""],
-    ["passages", "Passages de position", "150 pts chacun · à remplir en début de mois"],
+    ["passages_b1", "Passages de position · branche 1", "1 par PERSONNE qui passe · 150 pts"],
+    ["passages_b2", "Passages de position · branche 2", "1 par PERSONNE qui passe · 150 pts"],
   ],
   gars: [
     ["dms", "DMs envoyés", "objectif : 200 par jour"],
@@ -51,7 +53,8 @@ const CHAMPS_UI = {
     ["autres_b2", "Autres packs · branche 2 (pts)", ""],
     ["renouv_b1", "Renouvellements · branche 1 (pts)", "m2 95 · m3 85 · m4 75 · m5 65 · m6+ 50"],
     ["renouv_b2", "Renouvellements · branche 2 (pts)", ""],
-    ["passages", "Passages de position", "150 pts chacun · à remplir en début de mois"],
+    ["passages_b1", "Passages de position · branche 1", "1 par PERSONNE qui passe · 150 pts"],
+    ["passages_b2", "Passages de position · branche 2", "1 par PERSONNE qui passe · 150 pts"],
   ],
   leader: [
     ["vmens", "Ventes perso mensuelles", "300 pts"],
@@ -119,7 +122,7 @@ function joliJour(iso) {
 function joliHeure(ts) {
   try { return new Date(ts).toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" }); } catch { return ""; }
 }
-function ptsJour(d) { return totBase(d, "vmens") * PTS.vmens + totBase(d, "v12") * PTS.v12 + (+d.passages || 0) * PTS.passage + totBase(d, "renouv") + totBase(d, "autres"); }
+function ptsJour(d) { return totBase(d, "vmens") * PTS.vmens + totBase(d, "v12") * PTS.v12 + totBase(d, "passages") * PTS.passage + totBase(d, "renouv") + totBase(d, "autres"); }
 function ventesJour(d) { return totBase(d, "vmens") + totBase(d, "v12"); }
 async function api(corps) {
   const r = await fetch(API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: CODE, ...corps }) });
@@ -465,13 +468,13 @@ function rendsJour(sec, id, cfg, saisies) {
     <div class="todo${fait(l) ? " ok" : ""}" data-k="${l.k}">
       <span class="tcheck">✓</span>
       <div class="tlab">${esc(l.label)}${l.cible ? `<span class="tsub">objectif ${l.cible.toLocaleString("fr-FR")}</span>` : ""}</div>
-      <div class="tnum"><button type="button" data-m="-1" aria-label="moins">−</button><input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" value="${d[l.k] != null ? d[l.k] : ""}" placeholder="0" aria-label="${esc(l.label)}"><button type="button" data-m="1" aria-label="plus">+</button></div>
+      <div class="tnum"><button type="button" data-m="-1" aria-label="moins">−</button><input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" name="x_${l.k}" value="${d[l.k] != null ? d[l.k] : ""}" placeholder="0" aria-label="${esc(l.label)}"><button type="button" data-m="1" aria-label="plus">+</button></div>
     </div>`).join("");
   const t = dz.t;
   const pctPts = Math.min(100, Math.round((t._pts / (cfg.cible_pts || 1)) * 100));
   const branches = cfg.type === "leader" ? `<div class="sec-t">Tes branches</div>
     <div class="pline"><b style="color:var(--accent)">${esc(dz.principal.n)}</b> ${esc(dz.principal.l)}</div>` : "";
-  const pB = (suf) => saisies.reduce((a, sx) => { const dx = sx.d || {}; return a + (+dx["vmens_" + suf] || 0) * PTS.vmens + (+dx["v12_" + suf] || 0) * PTS.v12 + (+dx["autres_" + suf] || 0) + (+dx["renouv_" + suf] || 0); }, 0);
+  const pB = (suf) => saisies.reduce((a, sx) => { const dx = sx.d || {}; return a + (+dx["vmens_" + suf] || 0) * PTS.vmens + (+dx["v12_" + suf] || 0) * PTS.v12 + (+dx["passages_" + suf] || 0) * PTS.passage + (+dx["autres_" + suf] || 0) + (+dx["renouv_" + suf] || 0); }, 0);
   const b1 = pB("b1"), b2 = pB("b2"), mxB = Math.max(b1, b2, 1);
   const blocBranches = cfg.type === "leader" ? "" : `<div class="sec-t">Tes deux branches<span>où tes démarrages sont partis</span></div>
     <div class="pline">Branche 1 · <b>${b1.toLocaleString("fr-FR")}</b> pts</div>
@@ -561,7 +564,7 @@ function rendsJour(sec, id, cfg, saisies) {
     };
   }
 }
-const RARES = ["vmens", "v12", "autres_pts", "renouv_pts", "vmens_b1", "vmens_b2", "v12_b1", "v12_b2", "autres_b1", "autres_b2", "renouv_b1", "renouv_b2", "passages"];
+const RARES = ["vmens", "v12", "autres_pts", "renouv_pts", "vmens_b1", "vmens_b2", "v12_b1", "v12_b2", "autres_b1", "autres_b2", "renouv_b1", "renouv_b2", "passages", "passages_b1", "passages_b2"];
 const CALLS = ["closings", "r2", "show_close", "show_r2", "signes"];
 function formHTML(cfg, s, jour, prefixe) {
   const type = cfg.type || "fille";
@@ -572,7 +575,7 @@ function formHTML(cfg, s, jour, prefixe) {
     for (let i = 0; i < liste.length; i += 2) {
       const paire = liste.slice(i, i + 2).map(([k, label, aide]) => `
       <div class="field"><label for="${prefixe}_${k}">${esc(label)}${aide ? ` — <span style="color:var(--muted)">${esc(aide)}</span>` : ""}</label>
-      <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" id="${prefixe}_${k}" value="${d[k] != null ? d[k] : ""}" placeholder="0"></div>`).join("");
+      <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" name="x_${k}" id="${prefixe}_${k}" value="${d[k] != null ? d[k] : ""}" placeholder="0"></div>`).join("");
       rangs.push(`<div class="row2">${paire}</div>`);
     }
     return rangs.join("");
@@ -640,15 +643,27 @@ function etapesDe(type) {
 function rendsAssistant(sec, cfg, jourInit) {
   const type = cfg.type || "fille";
   const { quot, rares, calls } = etapesDe(type);
-  const etapes = quot.map((c) => ({ genre: "num", c }))
-    .concat(calls.length ? [{ genre: "calls" }] : [])
-    .concat([{ genre: "ventes" }, { genre: "fin" }]);
+  const inT = (k, v) => `<input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" name="x_${k}" id="w_${k}" value="${v != null ? v : ""}" placeholder="0" aria-label="${k}">`;
+  const GROUPES = type === "leader" ? { ventes: { titre: "Des ventes aujourd'hui ?", hint: "Laisse vide si rien.", liste: rares } } : {
+    calls: { titre: "Des calls aujourd'hui ?", hint: "Closings, R2, shows, clients signés.", liste: calls },
+    ventes: { titre: "Des ventes aujourd'hui ?", hint: "Mets chaque démarrage dans la branche où il a eu lieu.",
+      grille: [["vmens_b1", "vmens_b2", "Ventes mensuelles", "300 pts"], ["v12_b1", "v12_b2", "Ventes 12 mois", "660 pts"], ["autres_b1", "autres_b2", "Autres packs (pts)", "Pro 150 · Prem. 230 · Pro an 530 · Prem. an 600"]] },
+    passages: { titre: "Des passages de position ?", hint: "Mets 1 par PERSONNE qui passe (150 pts chacun) · pas les points de qualif.",
+      grille: [["passages_b1", "passages_b2", "Passages", "1 par personne"]] },
+    renouv: { titre: "Des renouvellements ?", hint: "En points : m2 95 · m3 85 · m4 75 · m5 65 · m6+ 50.",
+      grille: [["renouv_b1", "renouv_b2", "Renouvellements (pts)", ""]] },
+  };
+  const clesDe = (g) => g.liste ? g.liste.map(([k]) => k) : g.grille.flatMap(([k1, k2]) => [k1, k2]);
+  const etapes = quot.map((c) => ({ genre: "num", c }));
+  for (const genre of Object.keys(GROUPES)) if (clesDe(GROUPES[genre]).length) etapes.push({ genre, ouvert: false });
+  etapes.push({ genre: "fin" });
   const total = etapes.length;
   let jour = jourInit, vals = {}, blocage = "", i = 0;
   const charge = () => {
     const sx = saisieDuJour(SAISIES, jour);
     vals = {}; blocage = (sx && sx.blocage) || "";
     if (sx && sx.d) for (const [k, v] of Object.entries(sx.d)) vals[k] = v;
+    for (const e of etapes) e.ouvert = false;
   };
   charge();
   const rends = () => {
@@ -660,38 +675,33 @@ function rendsAssistant(sec, cfg, jourInit) {
     if (e.genre === "num") {
       const [k, label, aide] = e.c;
       corps = `<div class="wiz-q">${esc(label)}</div>${aide ? `<div class="wiz-hint">${esc(aide)}</div>` : ""}
-        <input class="wiz-in" id="wVal" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" value="${vals[k] != null ? vals[k] : ""}" placeholder="0">
+        <input class="wiz-in" id="wVal" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" name="x_${k}" value="${vals[k] != null ? vals[k] : ""}" placeholder="0">
         <div class="wiz-pm">
           <button type="button" data-pm="-1">−1</button>
           <button type="button" data-pm="1">+1</button>
           <button type="button" data-pm="5">+5</button>
           <button type="button" data-pm="25">+25</button>
         </div>` + nav(true);
-    } else if (e.genre === "calls") {
-      corps = `<div class="wiz-q">Tes calls du jour</div><div class="wiz-hint">Closings, R2, les shows, et les clients signés.</div>
-        <div class="wiz-rares">` + calls.map(([k, label, aide]) => `
-          <div class="field"><label for="w_${k}">${esc(label)}${aide ? ` · <span style="color:var(--muted)">${esc(aide)}</span>` : ""}</label>
-          <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" id="w_${k}" value="${vals[k] != null ? vals[k] : ""}" placeholder="0"></div>`).join("") + `</div>` + nav(true);
-    } else if (e.genre === "ventes") {
-      if (type === "leader") {
-        corps = `<div class="wiz-q">Des ventes aujourd'hui ?</div><div class="wiz-hint">Laisse vide si rien.</div>
-          <div class="wiz-rares">` + rares.map(([k, label, aide]) => `
+    } else if (GROUPES[e.genre]) {
+      const g = GROUPES[e.genre];
+      const cles = clesDe(g);
+      const aDes = cles.some((k) => +vals[k] > 0);
+      if (!aDes && !e.ouvert) {
+        corps = `<div class="wiz-q">${g.titre}</div><div class="wiz-hint">${g.hint}</div>
+          <div class="wiz-choix">
+            <button type="button" class="abtn" id="wNon">Non, rien</button>
+            <button type="button" class="abtn oui" id="wOui">Oui</button>
+          </div>` + nav(false);
+      } else if (g.liste) {
+        corps = `<div class="wiz-q">${g.titre.replace(" ?", "")}</div><div class="wiz-hint">${g.hint}</div>
+          <div class="wiz-rares">` + g.liste.map(([k, label, aide]) => `
             <div class="field"><label for="w_${k}">${esc(label)}${aide ? ` · <span style="color:var(--muted)">${esc(aide)}</span>` : ""}</label>
-            <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" id="w_${k}" value="${vals[k] != null ? vals[k] : ""}" placeholder="0"></div>`).join("") + `</div>` + nav(true);
+            ${inT(k, vals[k])}</div>`).join("") + `</div>` + nav(true);
       } else {
-        const lignesV = [
-          ["vmens_b1", "vmens_b2", "Ventes mensuelles", "300 pts"],
-          ["v12_b1", "v12_b2", "Ventes 12 mois", "660 pts"],
-          ["autres_b1", "autres_b2", "Autres packs (pts)", "Pro 150 · Prem. 230 · Pro an 530 · Prem. an 600"],
-          ["renouv_b1", "renouv_b2", "Renouvellements (pts)", "m2 95 · m3 85 · m4 75 · m5 65 · m6+ 50"],
-        ];
-        const inV = (k) => `<input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" id="w_${k}" value="${vals[k] != null ? vals[k] : ""}" placeholder="0" aria-label="${k}">`;
-        corps = `<div class="wiz-q">Des ventes aujourd'hui ?</div><div class="wiz-hint">Laisse vide si rien. Mets chaque démarrage dans la branche où il a eu lieu.</div>
+        corps = `<div class="wiz-q">${g.titre.replace(" ?", "")}</div><div class="wiz-hint">${g.hint}</div>
           <div class="vgrid"><span></span><span class="vgh">Branche 1</span><span class="vgh">Branche 2</span>` +
-          lignesV.map(([k1, k2, lab, aide]) => `<span class="vgl">${esc(lab)}<i>${esc(aide)}</i></span>${inV(k1)}${inV(k2)}`).join("") +
-          `</div>
-          <div class="field" style="margin-top:16px"><label for="w_passages">Passages de position · <span style="color:var(--muted)">150 pts chacun · à remplir en début de mois</span></label>
-          <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" id="w_passages" value="${vals.passages != null ? vals.passages : ""}" placeholder="0"></div>` + nav(true);
+          g.grille.map(([k1, k2, lab, aide]) => `<span class="vgl">${esc(lab)}${aide ? `<i>${esc(aide)}</i>` : ""}</span>${inT(k1, vals[k1])}${inT(k2, vals[k2])}`).join("") +
+          `</div>` + nav(true);
       }
     } else {
       corps = `<div class="wiz-q">Un blocage aujourd'hui ?</div><div class="wiz-hint">Une phrase, Tony te répond avec l'axe du lendemain.</div>
@@ -708,13 +718,14 @@ function rendsAssistant(sec, cfg, jourInit) {
     const garde = () => {
       const e2 = etapes[i];
       if (e2.genre === "num") { const el = $("#wVal", sec); if (el) vals[e2.c[0]] = el.value; }
-      if (e2.genre === "ventes") for (const [k] of rares) { const el = $("#w_" + k, sec); if (el) vals[k] = el.value; }
-      if (e2.genre === "calls") for (const [k] of calls) { const el = $("#w_" + k, sec); if (el) vals[k] = el.value; }
-      if (e2.genre === "fin") { const el = $("#wBlocage", sec); if (el) blocage = el.value; }
+      else if (GROUPES[e2.genre]) for (const k of clesDe(GROUPES[e2.genre])) { const el = $("#w_" + k, sec); if (el) vals[k] = el.value; }
+      else { const el = $("#wBlocage", sec); if (el) blocage = el.value; }
     };
     $("#wJour", sec).onchange = (ev) => { jour = ev.target.value; charge(); i = 0; rends(); };
     const back = $("#wRetour", sec); if (back) back.onclick = () => { garde(); i--; rends(); };
     const nx = $("#wSuivant", sec); if (nx) nx.onclick = () => { garde(); i++; rends(); };
+    const oui = $("#wOui", sec); if (oui) oui.onclick = () => { etapes[i].ouvert = true; rends(); };
+    const non = $("#wNon", sec); if (non) non.onclick = () => { i++; rends(); };
     const inp = $("#wVal", sec);
     if (inp) {
       for (const b of $$(".wiz-pm button", sec)) b.onclick = () => {
