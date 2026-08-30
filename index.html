@@ -159,6 +159,16 @@
   details.regl[open] > summary::after { content:"\2212"; }
   details.regl[open] > summary { margin-bottom:14px; }
   details.regl div { white-space:normal; padding-top:0; }
+  body.ib { --accent:#34d399; }
+  body.ib .agseg button.active { background:#34d399; color:#04150d; }
+  .ib-hero { text-align:center; padding:70px 20px; }
+  .ib-hero .logo-ib { font-size:40px; font-weight:800; letter-spacing:3px; color:var(--ink); }
+  .ib-hero .logo-ib span { color:var(--accent); }
+  .ib-dots { display:flex; gap:9px; justify-content:center; margin:26px 0; }
+  .ib-dots i { width:10px; height:10px; border-radius:99px; background:var(--accent); animation:ibPulse 1.2s ease-in-out infinite; }
+  .ib-dots i:nth-child(2) { animation-delay:.2s; }
+  .ib-dots i:nth-child(3) { animation-delay:.4s; }
+  @keyframes ibPulse { 0%,100% { opacity:.25; transform:scale(.85); } 50% { opacity:1; transform:scale(1.15); } }
   .wiz-top { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; }
   .wiz-top input[type=date] { background:var(--raise); border:1px solid var(--line); border-radius:8px; color:var(--muted); padding:6px 8px; font-size:16px; font-family:inherit; }
   .wiz-count { color:var(--muted); font-size:13px; font-weight:650; flex:none; }
@@ -509,6 +519,10 @@
     <header>
       <div><h1 id="pageTitle"></h1><div class="sub" id="pageSub"></div></div>
       <div class="hdroite">
+        <div class="agseg" id="partieSwitch" style="display:none">
+          <button data-partie="mlm">MLM</button>
+          <button data-partie="ib">IB</button>
+        </div>
         <div class="controls">
           <button id="refresh" title="Rafraîchir" aria-label="Rafraîchir">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
@@ -521,11 +535,13 @@
     <section class="page" id="page-jour"></section>
     <section class="page" id="page-saisie"></section>
     <section class="page" id="page-historique"></section>
+    <section class="page" id="page-kpi"></section>
+    <section class="page" id="page-ib"></section>
     <section class="page" id="page-equipe"></section>
     <section class="page" id="page-reglages"></section>
     <section class="page" id="page-liens"></section>
   </main>
 </div>
-<script src="app.js?v=7"></script>
+<script src="app.js?v=8"></script>
 </body>
 </html>
