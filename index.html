@@ -176,7 +176,8 @@
   .pline { color:var(--muted); font-size:13.5px; margin:2px 0 4px; }
   .pline b { color:var(--ink); font-size:16px; }
   .tlist { margin-top:6px; }
-  .todo { display:flex; align-items:center; gap:12px; padding:8px 8px; margin:0 -8px; border-radius:8px; }
+  .todo { display:flex; align-items:center; gap:12px; padding:8px 8px; margin:0 -8px; border-radius:8px; user-select:none; -webkit-user-select:none; }
+  .tnum input { user-select:text; -webkit-user-select:text; }
   .todo:hover { background:rgba(255,255,255,.025); }
   .tcheck { flex:none; width:19px; height:19px; border-radius:5px; border:1.5px solid var(--line); color:transparent; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; transition:all .15s ease; }
   .todo.ok .tcheck { background:var(--accent); border-color:var(--accent); color:#140b26; }
@@ -588,6 +589,6 @@
     <section class="page" id="page-liens"></section>
   </main>
 </div>
-<script src="app.js?v=13"></script>
+<script src="app.js?v=14"></script>
 </body>
 </html>
