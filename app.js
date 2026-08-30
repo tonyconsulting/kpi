@@ -6,6 +6,13 @@ const CLE_SNAP = "kpi_jour_snap";
 const VAPID_PUB = "BBefpGJrlJu2jhuahy0XnidzpnE5nfZ84kRh3YueXISXD036WLlbQu50vebuJcKKiF05xz5Cj_C__Qa8wc_YWNQ";
 const FIN_MOIS = "2026-09-30";
 const PTS = { vmens: 300, v12: 660, passage: 150 };
+const TRIPLES = {
+  vmens: ["vmens", "vmens_b1", "vmens_b2"],
+  v12: ["v12", "v12_b1", "v12_b2"],
+  autres: ["autres_pts", "autres_b1", "autres_b2"],
+  renouv: ["renouv_pts", "renouv_b1", "renouv_b2"],
+};
+function totBase(d, b) { return TRIPLES[b].reduce((a, k) => a + (+d[k] || 0), 0); }
 const HYP = { fille: { lead: 0.5, chaud: 0.5, close: 1 / 3 }, gars: { rep: 0.34, redi: 0.42, set: 0.5, close: 1 / 3 } };
 const COULEURS_AVI = ["#a78bfa", "#34d399", "#f472b6", "#60a5fa", "#fbbf24", "#f87171", "#2dd4bf", "#c084fc", "#fb923c"];
 
@@ -14,24 +21,37 @@ const CHAMPS_UI = {
     ["conversations", "Conversations ouvertes", "DMs, réponses stories, commentaires"],
     ["leads", "Leads", "des gens qui te répondent"],
     ["chauds", "Leads chauds", "de vraies questions d'intérêt"],
-    ["vmens", "Ventes mensuelles", "packs 1 mois — 300 pts"],
-    ["v12", "Ventes 12 mois", "compte double — 660 pts"],
-    ["autres_pts", "Autres packs (en points)", "Pro 150 · Premium 230 · Pro an 530 · Prem. an 600"],
-    ["passages", "Passages de position", "150 pts chacun"],
-    ["renouv_pts", "Renouvellements (en points)", "mois 2 : 95 · m3 : 85 · m4 : 75 · m5 : 65 · m6+ : 50"],
     ["contenus", "Contenus postés", "stories + posts + vidéos"],
+    ["vmens_b1", "Ventes mensuelles · branche 1", "300 pts"],
+    ["vmens_b2", "Ventes mensuelles · branche 2", "300 pts"],
+    ["v12_b1", "Ventes 12 mois · branche 1", "660 pts"],
+    ["v12_b2", "Ventes 12 mois · branche 2", "660 pts"],
+    ["autres_b1", "Autres packs · branche 1 (pts)", "Pro 150 · Premium 230 · Pro an 530 · Prem. an 600"],
+    ["autres_b2", "Autres packs · branche 2 (pts)", ""],
+    ["renouv_b1", "Renouvellements · branche 1 (pts)", "m2 95 · m3 85 · m4 75 · m5 65 · m6+ 50"],
+    ["renouv_b2", "Renouvellements · branche 2 (pts)", ""],
+    ["passages", "Passages de position", "150 pts chacun · à remplir en début de mois"],
   ],
   gars: [
-    ["dms", "DMs envoyés", "plancher : 200 par jour"],
-    ["fu", "Follow-ups", "plancher : 25 par jour"],
+    ["dms", "DMs envoyés", "objectif : 200 par jour"],
+    ["fu", "Follow-ups", "objectif : 25 par jour"],
     ["reponses", "Réponses reçues", ""],
     ["redis", "Redirigés", "amenés sur le compte / l'offre"],
     ["settes", "Settés", "rendez-vous posés"],
-    ["vmens", "Ventes mensuelles", "packs 1 mois — 300 pts"],
-    ["v12", "Ventes 12 mois", "compte double — 660 pts"],
-    ["autres_pts", "Autres packs (en points)", "Pro 150 · Premium 230 · Pro an 530 · Prem. an 600"],
-    ["passages", "Passages de position", "150 pts chacun"],
-    ["renouv_pts", "Renouvellements (en points)", "mois 2 : 95 · m3 : 85 · m4 : 75 · m5 : 65 · m6+ : 50"],
+    ["closings", "Appels de closing du jour", ""],
+    ["r2", "R2 du jour", ""],
+    ["show_close", "Shows closing", "venus au rendez-vous"],
+    ["show_r2", "Shows R2", ""],
+    ["signes", "Clients signés", ""],
+    ["vmens_b1", "Ventes mensuelles · branche 1", "300 pts"],
+    ["vmens_b2", "Ventes mensuelles · branche 2", "300 pts"],
+    ["v12_b1", "Ventes 12 mois · branche 1", "660 pts"],
+    ["v12_b2", "Ventes 12 mois · branche 2", "660 pts"],
+    ["autres_b1", "Autres packs · branche 1 (pts)", "Pro 150 · Premium 230 · Pro an 530 · Prem. an 600"],
+    ["autres_b2", "Autres packs · branche 2 (pts)", ""],
+    ["renouv_b1", "Renouvellements · branche 1 (pts)", "m2 95 · m3 85 · m4 75 · m5 65 · m6+ 50"],
+    ["renouv_b2", "Renouvellements · branche 2 (pts)", ""],
+    ["passages", "Passages de position", "150 pts chacun · à remplir en début de mois"],
   ],
   leader: [
     ["vmens", "Ventes perso mensuelles", "300 pts"],
@@ -44,8 +64,8 @@ const CHAMPS_UI = {
   ],
 };
 const COLS_HIST = {
-  fille: [["conversations", "Conv."], ["leads", "Leads"], ["chauds", "Chauds"], ["vmens", "V. mens"], ["v12", "V. 12m"], ["passages", "Pass."], ["renouv_pts", "Renouv."], ["contenus", "Contenus"]],
-  gars: [["dms", "DMs"], ["fu", "FU"], ["reponses", "Rép."], ["redis", "Redi"], ["settes", "Settés"], ["vmens", "V. mens"], ["v12", "V. 12m"], ["passages", "Pass."], ["renouv_pts", "Renouv."]],
+  fille: [["conversations", "Conv."], ["leads", "Leads"], ["chauds", "Chauds"], ["t:vmens", "V. mens"], ["t:v12", "V. 12m"], ["t:renouv", "Renouv."], ["contenus", "Contenus"]],
+  gars: [["dms", "DMs"], ["fu", "FU"], ["reponses", "Rép."], ["redis", "Redi"], ["settes", "Settés"], ["signes", "Signés"], ["t:vmens", "V. mens"], ["t:v12", "V. 12m"]],
   leader: [["vmens", "V. mens"], ["v12", "V. 12m"], ["passages", "Pass."], ["renouv_pts", "Renouv."], ["pts_b1", "Branche 1"], ["pts_b2", "Branche 2"]],
 };
 
@@ -99,8 +119,8 @@ function joliJour(iso) {
 function joliHeure(ts) {
   try { return new Date(ts).toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" }); } catch { return ""; }
 }
-function ptsJour(d) { return (+d.vmens || 0) * PTS.vmens + (+d.v12 || 0) * PTS.v12 + (+d.passages || 0) * PTS.passage + (+d.renouv_pts || 0) + (+d.autres_pts || 0); }
-function ventesJour(d) { return (+d.vmens || 0) + (+d.v12 || 0); }
+function ptsJour(d) { return totBase(d, "vmens") * PTS.vmens + totBase(d, "v12") * PTS.v12 + (+d.passages || 0) * PTS.passage + totBase(d, "renouv") + totBase(d, "autres"); }
+function ventesJour(d) { return totBase(d, "vmens") + totBase(d, "v12"); }
 async function api(corps) {
   const r = await fetch(API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: CODE, ...corps }) });
   const j = await r.json().catch(() => ({ erreur: "réseau" }));
@@ -135,7 +155,8 @@ function dose(cfg, saisies, jour) {
   const t = totaux(saisies);
   const restant = Math.max(0, (cfg.cible_pts || 0) - t._pts);
   const jr = joursRestants(jour);
-  const ppv = t._ventes > 0 ? ((+t.vmens || 0) * PTS.vmens + (+t.v12 || 0) * PTS.v12 + (+t.autres_pts || 0)) / t._ventes : PTS.vmens;
+  const tv = (b) => TRIPLES[b].reduce((a, k) => a + (+t[k] || 0), 0);
+  const ppv = t._ventes > 0 ? (tv("vmens") * PTS.vmens + tv("v12") * PTS.v12 + tv("autres")) / t._ventes : PTS.vmens;
   const vj = restant / ppv / jr;
   const type = cfg.type || "fille";
   const r = ratios(type, t);
@@ -153,7 +174,7 @@ function dose(cfg, saisies, jour) {
     const reps = redis / garde(r.redi);
     const dms = Math.max(cfg.plancher_dms || 200, Math.ceil(reps / garde(r.rep)));
     return { type, restant, jr, t, r,
-      principal: { n: dms, l: `DMs aujourd'hui + ${cfg.plancher_fu || 25} follow-ups (ton plancher)` },
+      principal: { n: dms, l: `DMs aujourd'hui + ${cfg.plancher_fu || 25} follow-ups (ton objectif)` },
       petits: [[arr1(reps), "réponses visées"], [arr1(redis), "redirigés visés"], [arr1(settes), "settés visés"], [arr1(vj), "ventes visées"]] };
   }
   const chauds = vj / garde(r.close);
@@ -343,7 +364,7 @@ function histTableHTML(cfg, saisies) {
   if (!saisies.length) return `<div class="empty"><b>Rien pour l'instant</b>Ta première saisie du soir apparaîtra ici.</div>`;
   const lignes = saisies.slice(0, 40).map((x) => `
     <tr><td><b>${esc(joliJour(x.jour))}</b></td>
-    ${cols.map(([k]) => `<td class="num">${x.d && x.d[k] != null ? esc(x.d[k]) : "·"}</td>`).join("")}
+    ${cols.map(([k]) => { const v = k.startsWith("t:") ? (totBase(x.d || {}, k.slice(2)) || null) : (x.d ? x.d[k] : null); return `<td class="num">${v != null ? esc(v) : "·"}</td>`; }).join("")}
     <td class="num"><b>${ptsJour(x.d || {})}</b></td>
     <td style="white-space:normal;min-width:150px;color:var(--warn);font-size:12.5px">${esc(x.blocage || "")}</td></tr>`).join("");
   return `<div class="tscroll"><table>
@@ -450,6 +471,13 @@ function rendsJour(sec, id, cfg, saisies) {
   const pctPts = Math.min(100, Math.round((t._pts / (cfg.cible_pts || 1)) * 100));
   const branches = cfg.type === "leader" ? `<div class="sec-t">Tes branches</div>
     <div class="pline"><b style="color:var(--accent)">${esc(dz.principal.n)}</b> ${esc(dz.principal.l)}</div>` : "";
+  const pB = (suf) => saisies.reduce((a, sx) => { const dx = sx.d || {}; return a + (+dx["vmens_" + suf] || 0) * PTS.vmens + (+dx["v12_" + suf] || 0) * PTS.v12 + (+dx["autres_" + suf] || 0) + (+dx["renouv_" + suf] || 0); }, 0);
+  const b1 = pB("b1"), b2 = pB("b2"), mxB = Math.max(b1, b2, 1);
+  const blocBranches = cfg.type === "leader" ? "" : `<div class="sec-t">Tes deux branches<span>où tes démarrages sont partis</span></div>
+    <div class="pline">Branche 1 · <b>${b1.toLocaleString("fr-FR")}</b> pts</div>
+    <div class="tbar"><i style="width:${Math.round((b1 / mxB) * 100)}%"></i></div>
+    <div class="pline" style="margin-top:10px">Branche 2 · <b>${b2.toLocaleString("fr-FR")}</b> pts</div>
+    <div class="tbar"><i style="width:${Math.round((b2 / mxB) * 100)}%"></i></div>`;
   sec.innerHTML = `<div class="zen">
     ${bandeauZenHTML(id, saisies)}
     ${branches}
@@ -462,6 +490,7 @@ function rendsJour(sec, id, cfg, saisies) {
     <div class="sec-t">Progression du mois<span class="eur" style="letter-spacing:0;text-transform:none;font-size:13px">${(cfg.objectif_eur || 0).toLocaleString("fr-FR")} €</span></div>
     <div class="pline"><b>${t._pts.toLocaleString("fr-FR")}</b> / ${(cfg.cible_pts || 0).toLocaleString("fr-FR")} points · ${pctPts} % · ${dz.jr} jour${dz.jr > 1 ? "s" : ""} restant${dz.jr > 1 ? "s" : ""}</div>
     <div class="tbar big"><i style="width:${pctPts}%"></i></div>
+    ${blocBranches}
     <details class="regl" style="margin-top:26px"><summary>Le détail (semaine, ratios)</summary>
       <div class="stats" style="margin:14px 0 6px">` +
       dz.petits.map(([n, l]) => statHTML(l, esc(String(n)))).join("") +
@@ -532,7 +561,8 @@ function rendsJour(sec, id, cfg, saisies) {
     };
   }
 }
-const RARES = ["vmens", "v12", "autres_pts", "passages", "renouv_pts"];
+const RARES = ["vmens", "v12", "autres_pts", "renouv_pts", "vmens_b1", "vmens_b2", "v12_b1", "v12_b2", "autres_b1", "autres_b2", "renouv_b1", "renouv_b2", "passages"];
+const CALLS = ["closings", "r2", "show_close", "show_r2", "signes"];
 function formHTML(cfg, s, jour, prefixe) {
   const type = cfg.type || "fille";
   const champs = CHAMPS_UI[type] || CHAMPS_UI.fille;
@@ -602,14 +632,17 @@ function rendsSaisie(sec, id, cfg, saisies) {
 }
 function etapesDe(type) {
   const champs = CHAMPS_UI[type] || CHAMPS_UI.fille;
-  const quot = type === "leader" ? champs.filter(([k]) => k === "pts_b1" || k === "pts_b2") : champs.filter(([k]) => !RARES.includes(k));
+  const quot = type === "leader" ? champs.filter(([k]) => k === "pts_b1" || k === "pts_b2") : champs.filter(([k]) => !RARES.includes(k) && !CALLS.includes(k));
   const rares = champs.filter(([k]) => RARES.includes(k));
-  return { quot, rares };
+  const calls = champs.filter(([k]) => CALLS.includes(k));
+  return { quot, rares, calls };
 }
 function rendsAssistant(sec, cfg, jourInit) {
   const type = cfg.type || "fille";
-  const { quot, rares } = etapesDe(type);
-  const etapes = quot.map((c) => ({ genre: "num", c })).concat([{ genre: "ventes" }, { genre: "fin" }]);
+  const { quot, rares, calls } = etapesDe(type);
+  const etapes = quot.map((c) => ({ genre: "num", c }))
+    .concat(calls.length ? [{ genre: "calls" }] : [])
+    .concat([{ genre: "ventes" }, { genre: "fin" }]);
   const total = etapes.length;
   let jour = jourInit, vals = {}, blocage = "", i = 0;
   const charge = () => {
@@ -634,11 +667,32 @@ function rendsAssistant(sec, cfg, jourInit) {
           <button type="button" data-pm="5">+5</button>
           <button type="button" data-pm="25">+25</button>
         </div>` + nav(true);
-    } else if (e.genre === "ventes") {
-      corps = `<div class="wiz-q">Des ventes aujourd'hui ?</div><div class="wiz-hint">Laisse vide si rien — ça compte dans tes points.</div>
-        <div class="wiz-rares">` + rares.map(([k, label, aide]) => `
-          <div class="field"><label for="w_${k}">${esc(label)}${aide ? ` — <span style="color:var(--muted)">${esc(aide)}</span>` : ""}</label>
+    } else if (e.genre === "calls") {
+      corps = `<div class="wiz-q">Tes calls du jour</div><div class="wiz-hint">Closings, R2, les shows, et les clients signés.</div>
+        <div class="wiz-rares">` + calls.map(([k, label, aide]) => `
+          <div class="field"><label for="w_${k}">${esc(label)}${aide ? ` · <span style="color:var(--muted)">${esc(aide)}</span>` : ""}</label>
           <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" id="w_${k}" value="${vals[k] != null ? vals[k] : ""}" placeholder="0"></div>`).join("") + `</div>` + nav(true);
+    } else if (e.genre === "ventes") {
+      if (type === "leader") {
+        corps = `<div class="wiz-q">Des ventes aujourd'hui ?</div><div class="wiz-hint">Laisse vide si rien.</div>
+          <div class="wiz-rares">` + rares.map(([k, label, aide]) => `
+            <div class="field"><label for="w_${k}">${esc(label)}${aide ? ` · <span style="color:var(--muted)">${esc(aide)}</span>` : ""}</label>
+            <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" id="w_${k}" value="${vals[k] != null ? vals[k] : ""}" placeholder="0"></div>`).join("") + `</div>` + nav(true);
+      } else {
+        const lignesV = [
+          ["vmens_b1", "vmens_b2", "Ventes mensuelles", "300 pts"],
+          ["v12_b1", "v12_b2", "Ventes 12 mois", "660 pts"],
+          ["autres_b1", "autres_b2", "Autres packs (pts)", "Pro 150 · Prem. 230 · Pro an 530 · Prem. an 600"],
+          ["renouv_b1", "renouv_b2", "Renouvellements (pts)", "m2 95 · m3 85 · m4 75 · m5 65 · m6+ 50"],
+        ];
+        const inV = (k) => `<input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" id="w_${k}" value="${vals[k] != null ? vals[k] : ""}" placeholder="0" aria-label="${k}">`;
+        corps = `<div class="wiz-q">Des ventes aujourd'hui ?</div><div class="wiz-hint">Laisse vide si rien. Mets chaque démarrage dans la branche où il a eu lieu.</div>
+          <div class="vgrid"><span></span><span class="vgh">Branche 1</span><span class="vgh">Branche 2</span>` +
+          lignesV.map(([k1, k2, lab, aide]) => `<span class="vgl">${esc(lab)}<i>${esc(aide)}</i></span>${inV(k1)}${inV(k2)}`).join("") +
+          `</div>
+          <div class="field" style="margin-top:16px"><label for="w_passages">Passages de position · <span style="color:var(--muted)">150 pts chacun · à remplir en début de mois</span></label>
+          <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" id="w_passages" value="${vals.passages != null ? vals.passages : ""}" placeholder="0"></div>` + nav(true);
+      }
     } else {
       corps = `<div class="wiz-q">Un blocage aujourd'hui ?</div><div class="wiz-hint">Une phrase, Tony te répond avec l'axe du lendemain.</div>
         <div class="field" style="margin-top:14px"><textarea id="wBlocage" maxlength="500" placeholder="ex : plein de leads mais personne veut le call…">${esc(blocage)}</textarea></div>
@@ -655,6 +709,7 @@ function rendsAssistant(sec, cfg, jourInit) {
       const e2 = etapes[i];
       if (e2.genre === "num") { const el = $("#wVal", sec); if (el) vals[e2.c[0]] = el.value; }
       if (e2.genre === "ventes") for (const [k] of rares) { const el = $("#w_" + k, sec); if (el) vals[k] = el.value; }
+      if (e2.genre === "calls") for (const [k] of calls) { const el = $("#w_" + k, sec); if (el) vals[k] = el.value; }
       if (e2.genre === "fin") { const el = $("#wBlocage", sec); if (el) blocage = el.value; }
     };
     $("#wJour", sec).onchange = (ev) => { jour = ev.target.value; charge(); i = 0; rends(); };
@@ -729,6 +784,9 @@ function closingHTML(cfg, saisies) {
     ["Réponses → redirigés", t.reponses, t.redis, HYP.gars.redi],
     ["Redirigés → settés", t.redis, t.settes, HYP.gars.set],
     ["Settés → ventes — TON CLOSING", t.settes, t._ventes, HYP.gars.close],
+    ["Appels de closing → shows", t.closings, t.show_close, null],
+    ["R2 → shows", t.r2, t.show_r2, null],
+    ["Shows closing → clients signés", t.show_close, t.signes, null],
   ] : [
     ["Conversations → leads", t.conversations, t.leads, HYP.fille.lead],
     ["Leads → chauds", t.leads, t.chauds, HYP.fille.chaud],
@@ -736,12 +794,13 @@ function closingHTML(cfg, saisies) {
   ];
   const lignes = etapes.map(([label, den, num, hyp]) => {
     const mesure = (den || 0) > 0 && (num || 0) > 0;
-    const v = mesure ? num / den : hyp;
+    const v = mesure ? num / den : (hyp == null ? 0 : hyp);
+    const aff = mesure || hyp != null ? Math.round(v * 100) + " %" : "—";
     return `<div style="padding:10px 0 2px">
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
         <div><div style="font-weight:650;font-size:14.5px">${esc(label)}</div>
-        <div style="color:var(--muted);font-size:12.5px">${mesure ? `${num || 0} sur ${den || 0}` : "hypothèse de départ, pas encore assez de chiffres"}</div></div>
-        <div style="font-size:22px;font-weight:750;color:${mesure ? "var(--accent)" : "var(--muted)"}">${Math.round(v * 100)} %</div>
+        <div style="color:var(--muted);font-size:12.5px">${mesure ? `${num || 0} sur ${den || 0}` : hyp == null ? "pas encore de données" : "hypothèse de départ, pas encore assez de chiffres"}</div></div>
+        <div style="font-size:22px;font-weight:750;color:${mesure ? "var(--accent)" : "var(--muted)"}">${aff}</div>
       </div>
       <div class="gbar" style="margin-top:6px"><i style="width:${Math.min(100, Math.round(v * 100))}%"></i></div>
     </div>`;
