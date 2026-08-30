@@ -771,17 +771,42 @@ function rendsKpi(sec, cfg, saisies) {
   sec.innerHTML = `<div class="zen">` + seg + (SOUS_KPI === "prod" ? prodPersoHTML(cfg, saisies) : closingHTML(cfg, saisies)) + `</div>`;
   for (const b of $$("[data-sk]", sec)) b.onclick = () => { SOUS_KPI = b.dataset.sk; rendsKpi(sec, cfg, saisies); };
 }
+function ligneTauxHTML(label, den, num, note) {
+  const mesure = (den || 0) > 0;
+  const v = mesure ? (num || 0) / den : 0;
+  return `<div style="padding:10px 0 2px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
+      <div><div style="font-weight:650;font-size:14.5px">${esc(label)}</div>
+      <div style="color:var(--muted);font-size:12.5px">${mesure ? `${num || 0} sur ${den || 0}` : note || "pas encore de données"}</div></div>
+      <div style="font-size:22px;font-weight:750;color:${mesure ? "var(--accent)" : "var(--muted)"}">${mesure ? Math.round(v * 100) + " %" : "—"}</div>
+    </div>
+    <div class="gbar" style="margin-top:6px"><i style="width:${Math.min(100, Math.round(v * 100))}%"></i></div>
+  </div>`;
+}
 function prodPersoHTML(cfg, saisies) {
   const t = totaux(saisies);
   const type = cfg.type || "fille";
   const jours = saisies.length;
   const volCle = type === "gars" ? ["dms", "DMs envoyés"] : ["conversations", "Conversations"];
+  const volTotal = +t[volCle[0]] || 0;
+  const convOk = volTotal > 0 && t._ventes > 0;
+  let funnel = "";
+  if (type === "gars") funnel =
+    ligneTauxHTML("DMs → réponses", t.dms, t.reponses) +
+    ligneTauxHTML("Réponses → redirigés", t.reponses, t.redis) +
+    ligneTauxHTML("Redirigés → settés", t.redis, t.settes);
+  else if (type === "fille") funnel =
+    ligneTauxHTML("Conversations → leads", t.conversations, t.leads) +
+    ligneTauxHTML("Leads → chauds", t.leads, t.chauds);
   return `<div class="sec-t">Ce mois</div><div class="stats">` +
     statHTML("Points", `<span style="color:var(--accent)">${t._pts.toLocaleString("fr-FR")}</span>`, `/ ${(cfg.cible_pts || 0).toLocaleString("fr-FR")}`) +
     statHTML("Ventes", String(t._ventes)) +
-    (type === "leader" ? statHTML("Points perso", t._pts.toLocaleString("fr-FR")) : statHTML(volCle[1], String(t[volCle[0]] || 0))) +
+    (type === "leader" ? statHTML("Points perso", t._pts.toLocaleString("fr-FR")) : statHTML(volCle[1], String(volTotal))) +
     statHTML("Régularité", `${jours}`, `/ ${joursEcoules()} jours`) +
-    `</div><div class="sec-t">Jour par jour</div>` + histTableHTML(cfg, saisies);
+    (type !== "leader" ? statHTML("Conversion totale", convOk ? `${(Math.round((t._ventes / volTotal) * 1000) / 10).toLocaleString("fr-FR")} %` : "—", type === "gars" ? "des DMs à la vente" : "de la conv. à la vente") : "") +
+    `</div>` +
+    (funnel ? `<div class="sec-t">Ton funnel de prospection<span>jusqu'au setting</span></div>` + funnel : "") +
+    `<div class="sec-t">Jour par jour</div>` + histTableHTML(cfg, saisies);
 }
 function closingHTML(cfg, saisies) {
   const type = cfg.type || "fille";
@@ -790,65 +815,58 @@ function closingHTML(cfg, saisies) {
     return `<div class="pline" style="margin-top:14px">Tes taux se mesurent dans tes branches. Ici : tes ventes perso, semaine par semaine.</div>
       <div class="sec-t">Semaine par semaine</div>` + semainesHTML(cfg, saisies);
   }
-  const etapes = type === "gars" ? [
-    ["DMs → réponses", t.dms, t.reponses, HYP.gars.rep],
-    ["Réponses → redirigés", t.reponses, t.redis, HYP.gars.redi],
-    ["Redirigés → settés", t.redis, t.settes, HYP.gars.set],
-    ["Settés → ventes — TON CLOSING", t.settes, t._ventes, HYP.gars.close],
-    ["Appels de closing → shows", t.closings, t.show_close, null],
-    ["R2 → shows", t.r2, t.show_r2, null],
-    ["Shows closing → clients signés", t.show_close, t.signes, null],
-  ] : [
-    ["Conversations → leads", t.conversations, t.leads, HYP.fille.lead],
-    ["Leads → chauds", t.leads, t.chauds, HYP.fille.chaud],
-    ["Chauds → ventes — TON CLOSING", t.chauds, t._ventes, HYP.fille.close],
-  ];
-  const lignes = etapes.map(([label, den, num, hyp]) => {
-    const mesure = (den || 0) > 0 && (num || 0) > 0;
-    const v = mesure ? num / den : (hyp == null ? 0 : hyp);
-    const aff = mesure || hyp != null ? Math.round(v * 100) + " %" : "—";
-    return `<div style="padding:10px 0 2px">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
-        <div><div style="font-weight:650;font-size:14.5px">${esc(label)}</div>
-        <div style="color:var(--muted);font-size:12.5px">${mesure ? `${num || 0} sur ${den || 0}` : hyp == null ? "pas encore de données" : "hypothèse de départ, pas encore assez de chiffres"}</div></div>
-        <div style="font-size:22px;font-weight:750;color:${mesure ? "var(--accent)" : "var(--muted)"}">${aff}</div>
-      </div>
-      <div class="gbar" style="margin-top:6px"><i style="width:${Math.min(100, Math.round(v * 100))}%"></i></div>
-    </div>`;
-  }).join("");
-  const closeDen = type === "gars" ? (t.settes || 0) : (t.chauds || 0);
-  const closeOk = closeDen > 0 && t._ventes > 0;
-  const volTotal = type === "gars" ? (t.dms || 0) : (t.conversations || 0);
-  const convOk = volTotal > 0 && t._ventes > 0;
-  const global = `<div class="sec-t">Tes taux</div><div class="stats" style="margin-bottom:8px">` +
-    statHTML("Taux de closing", closeOk ? `<span style="color:var(--accent)">${Math.round((t._ventes / closeDen) * 100)} %</span>` : "—",
-      closeOk ? `${t._ventes} / ${closeDen} ${type === "gars" ? "settés" : "chauds"}` : "pas assez de chiffres") +
-    statHTML("Conversion totale", convOk ? `${(Math.round((t._ventes / volTotal) * 1000) / 10).toLocaleString("fr-FR")} %` : "—",
-      type === "gars" ? "des DMs à la vente" : "de la conv. à la vente") +
-    `</div>`;
-  return global + lignes + `<div class="sec-t">Semaine par semaine</div>` + semainesHTML(cfg, saisies);
+  if (type === "fille") {
+    const ok = (t.chauds || 0) > 0;
+    return `<div class="sec-t">Ton closing</div><div class="stats" style="margin-bottom:8px">` +
+      statHTML("Taux de closing", ok ? `<span style="color:var(--accent)">${Math.round(((t._ventes || 0) / t.chauds) * 100)} %</span>` : "—",
+        ok ? `${t._ventes} / ${t.chauds} chauds` : "pas encore de données") +
+      `</div>` +
+      ligneTauxHTML("Chauds → ventes", t.chauds, t._ventes) +
+      `<div class="sec-t">Semaine par semaine</div>` + semainesHTML(cfg, saisies);
+  }
+  const okClose = (t.show_close || 0) > 0, okShow = (t.closings || 0) > 0, okR2 = (t.r2 || 0) > 0;
+  return `<div class="sec-t">Ton closing<span>à partir des appels de closing</span></div><div class="stats" style="margin-bottom:8px">` +
+    statHTML("Taux de closing", okClose ? `<span style="color:var(--accent)">${Math.round(((t.signes || 0) / t.show_close) * 100)} %</span>` : "—",
+      okClose ? `${t.signes || 0} signés / ${t.show_close} shows` : "pas encore de données") +
+    statHTML("Show closing", okShow ? `${Math.round(((t.show_close || 0) / t.closings) * 100)} %` : "—",
+      okShow ? `${t.show_close || 0} / ${t.closings} appels` : "pas encore de données") +
+    statHTML("Show R2", okR2 ? `${Math.round(((t.show_r2 || 0) / t.r2) * 100)} %` : "—",
+      okR2 ? `${t.show_r2 || 0} / ${t.r2} R2` : "pas encore de données") +
+    `</div>` +
+    ligneTauxHTML("Appels de closing → shows", t.closings, t.show_close) +
+    ligneTauxHTML("R2 → shows", t.r2, t.show_r2) +
+    ligneTauxHTML("Shows closing → clients signés", t.show_close, t.signes) +
+    `<div class="sec-t">Semaine par semaine</div>` + semainesHTML(cfg, saisies);
 }
 function semainesHTML(cfg, saisies) {
   if (!saisies.length) return `<div class="empty"><b>Rien pour l'instant</b>Tes taux apparaîtront dès tes premières saisies.</div>`;
   const type = cfg.type || "fille";
   const sem = {};
-  for (const s of saisies) {
-    const d = new Date(s.jour + "T12:00:00Z");
+  for (const sx of saisies) {
+    const d = new Date(sx.jour + "T12:00:00Z");
     const lundi = new Date(d); lundi.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
     const cle = lundi.toISOString().slice(0, 10);
-    (sem[cle] = sem[cle] || []).push(s);
+    (sem[cle] = sem[cle] || []).push(sx);
   }
-  const cols = type === "gars" ? [["dms", "DMs"], ["settes", "Settés"]]
-    : type === "leader" ? [["vmens", "V. mens"], ["v12", "V. 12m"]]
-    : [["conversations", "Conv."], ["chauds", "Chauds"]];
   const lignes = Object.keys(sem).sort().reverse().map((k) => {
     const t = totaux(sem[k]);
-    const den = type === "gars" ? (t.settes || 0) : type === "leader" ? 0 : (t.chauds || 0);
-    const taux = den > 0 && t._ventes > 0 ? Math.round((t._ventes / den) * 100) + " %" : "—";
-    return `<tr><td><b>Sem. du ${esc(joliJour(k))}</b></td>${cols.map(([c]) => `<td class="num">${t[c] || 0}</td>`).join("")}
-      <td class="num">${t._ventes}</td><td class="num">${t._pts.toLocaleString("fr-FR")}</td><td class="num"><b>${taux}</b></td></tr>`;
+    let cells, taux;
+    if (type === "gars") {
+      cells = [t.closings || 0, t.show_close || 0, t.signes || 0];
+      taux = (t.show_close || 0) > 0 ? Math.round(((t.signes || 0) / t.show_close) * 100) + " %" : "—";
+    } else if (type === "fille") {
+      cells = [t.chauds || 0, t._ventes, t._pts.toLocaleString("fr-FR")];
+      taux = (t.chauds || 0) > 0 ? Math.round((t._ventes / t.chauds) * 100) + " %" : "—";
+    } else {
+      cells = [t._ventes, t._pts.toLocaleString("fr-FR")];
+      taux = "—";
+    }
+    return `<tr><td><b>Sem. du ${esc(joliJour(k))}</b></td>${cells.map((c) => `<td class="num">${c}</td>`).join("")}<td class="num"><b>${taux}</b></td></tr>`;
   }).join("");
-  return `<div class="tscroll"><table><thead><tr><th>Semaine</th>${cols.map(([, l]) => `<th class="num">${esc(l)}</th>`).join("")}<th class="num">Ventes</th><th class="num">Pts</th><th class="num">Closing</th></tr></thead><tbody>${lignes}</tbody></table></div>`;
+  const entetes = type === "gars" ? ["Closings", "Shows", "Signés", "Closing"]
+    : type === "fille" ? ["Chauds", "Ventes", "Pts", "Closing"]
+    : ["Ventes", "Pts", "Closing"];
+  return `<div class="tscroll"><table><thead><tr><th>Semaine</th>${entetes.map((l) => `<th class="num">${l}</th>`).join("")}</tr></thead><tbody>${lignes}</tbody></table></div>`;
 }
 
 /* ================== partie IB (switch + placeholder) ================== */
