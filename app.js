@@ -59,6 +59,9 @@ const SVG = {
 };
 
 let CODE = null, MOI = null, PARAMS = {}, MEMBRES = null, SAISIES = [], PAGE = null, JOUR_RENDU = null, PARTIE = "mlm", SOUS_KPI = "prod";
+let FLUSH_JOUR = null, BEACON_JOUR = null;
+window.addEventListener("pagehide", () => { if (BEACON_JOUR) BEACON_JOUR(); });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden" && BEACON_JOUR) BEACON_JOUR(); });
 
 /* ================== utilitaires ================== */
 const $ = (s, r) => (r || document).querySelector(s);
@@ -428,6 +431,7 @@ function rendsJour(sec, id, cfg, saisies) {
     <div class="sec-t">Aujourd'hui<span id="jPct">${pctJ()} %</span></div>
     <div class="tbar" id="jBar"><i style="width:${pctJ()}%"></i></div>
     <div class="tlist">${rows}</div>
+    <div class="jsave" id="jSave"></div>
     <button class="qbtn" id="allerSaisie">${sJ ? "Corriger ma journée (ventes + blocage)" : "Finir ma journée (ventes + blocage)"}</button>
     ${grapheJoursHTML(cfg, saisies, jour)}
     <div class="sec-t">Progression du mois<span class="eur" style="letter-spacing:0;text-transform:none;font-size:13px">${(cfg.objectif_eur || 0).toLocaleString("fr-FR")} €</span></div>
@@ -451,22 +455,42 @@ function rendsJour(sec, id, cfg, saisies) {
     const e1 = $("#jPct", sec); if (e1) e1.textContent = p + " %";
     const e2 = $("#jBar i", sec); if (e2) e2.style.width = p + "%";
   };
-  const sauve = () => {
-    clearTimeout(timer);
-    timer = setTimeout(async () => {
-      try {
-        const dd = {};
-        for (const [k] of (CHAMPS_UI[cfg.type || "fille"] || CHAMPS_UI.fille)) {
-          const n = parseInt(d[k], 10);
-          if (!isNaN(n)) dd[k] = n;
-        }
-        await api({ action: "saisie", jour, d: dd, blocage: (sJ && sJ.blocage) || null });
-        const ex = saisieDuJour(SAISIES, jour);
-        if (ex) ex.d = dd;
-        else SAISIES.unshift({ jour, d: dd, blocage: null, maj: new Date().toISOString(), membre_id: MOI.id });
-        majStatut(true); majBadges();
-      } catch (_) { majStatut(false); }
-    }, 900);
+  const majSauve = (etat) => {
+    const e = $("#jSave", sec);
+    if (!e) return;
+    e.textContent = etat === "att" ? "sauvegarde…" : etat === "ok" ? "sauvegardé ✓" : "pas sauvegardé, vérifie ta connexion";
+    e.classList.toggle("err", etat === "err");
+  };
+  const construire = () => {
+    const dd = {};
+    for (const [k] of (CHAMPS_UI[cfg.type || "fille"] || CHAMPS_UI.fille)) {
+      const n = parseInt(d[k], 10);
+      if (!isNaN(n)) dd[k] = n;
+    }
+    return dd;
+  };
+  const envoie = async () => {
+    timer = null;
+    try {
+      const dd = construire();
+      await api({ action: "saisie", jour, d: dd, blocage: (sJ && sJ.blocage) || null });
+      const ex = saisieDuJour(SAISIES, jour);
+      if (ex) ex.d = dd;
+      else SAISIES.unshift({ jour, d: dd, blocage: null, maj: new Date().toISOString(), membre_id: MOI.id });
+      majStatut(true); majBadges(); majSauve("ok");
+    } catch (_) { majStatut(false); majSauve("err"); }
+  };
+  const sauve = () => { clearTimeout(timer); majSauve("att"); timer = setTimeout(envoie, 400); };
+  FLUSH_JOUR = async () => { if (timer) { clearTimeout(timer); await envoie(); } };
+  BEACON_JOUR = () => {
+    if (!timer) return;
+    clearTimeout(timer); timer = null;
+    try {
+      const corps = JSON.stringify({ code: CODE, action: "saisie", jour, d: construire(), blocage: (sJ && sJ.blocage) || null });
+      navigator.sendBeacon(API, new Blob([corps], { type: "text/plain" }));
+      const ex = saisieDuJour(SAISIES, jour);
+      if (ex) ex.d = construire();
+    } catch (_) {}
   };
   for (const row of $$(".todo", sec)) {
     const l = lignes.find((x) => x.k === row.dataset.k);
@@ -912,7 +936,7 @@ function brancheShell() {
   $("#navOverlay").onclick = fermeTiroir;
   $("#bellBtn").onclick = () => { montre(MOI.role === "admin" ? "equipe" : "saisie"); fermeTiroir(); };
   $("#refresh").onclick = async () => {
-    try { await chargeTout(); rendsPage(PAGE); majBadges(); toast("À jour ✔"); } catch { majStatut(false); }
+    try { if (FLUSH_JOUR) await FLUSH_JOUR(); await chargeTout(); rendsPage(PAGE); majBadges(); toast("À jour ✔"); } catch { majStatut(false); }
   };
   // Rafraîchissement silencieux : retour au premier plan + toutes les 5 min.
   // Jamais sur les pages formulaire (saisie, réglages) ni fiche ouverte, pour ne pas écraser une frappe.
@@ -926,7 +950,7 @@ function brancheShell() {
     if (!nouveauJour && (!pagesSures.includes(PAGE) || ficheOuverte())) return;
     const ac = document.activeElement;
     if (!nouveauJour && ac && (ac.tagName === "INPUT" || ac.tagName === "TEXTAREA")) return;
-    try { await chargeTout(); } catch { majStatut(false); return; }
+    try { if (FLUSH_JOUR) await FLUSH_JOUR(); await chargeTout(); } catch { majStatut(false); return; }
     // La situation a pu changer pendant le fetch : re-vérifier avant d'écraser le DOM.
     if (!nouveauJour && (!pagesSures.includes(PAGE) || ficheOuverte())) { majBadges(); return; }
     rendsPage(PAGE);
