@@ -225,6 +225,7 @@ async function brancheNotifs(sec) {
 
 /* ================== shell ================== */
 function pagesPour(role) {
+  if (PARTIE === "ib") return [["ib", "Tableau IB", SVG.jour]];
   if (role === "admin") return [
     ["equipe", "Équipe", SVG.equipe], ["reglages", "Réglages", SVG.reglages], ["liens", "Liens", SVG.lien],
   ];
@@ -634,6 +635,7 @@ function choisitPartie(p, sansNav) {
   PARTIE = p;
   document.body.classList.toggle("ib", p === "ib");
   for (const b of $$("#partieSwitch button")) b.classList.toggle("active", b.dataset.partie === p);
+  montreNav();
   if (!sansNav) montre(p === "ib" ? "ib" : "jour");
 }
 function rendsIB(sec) {
