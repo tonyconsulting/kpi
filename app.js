@@ -2,6 +2,7 @@
 "use strict";
 const API = "https://gwococcxzrrtadtricnd.supabase.co/functions/v1/kpi";
 const CLE_LS = "kpi_code";
+const CLE_SNAP = "kpi_jour_snap";
 const VAPID_PUB = "BBefpGJrlJu2jhuahy0XnidzpnE5nfZ84kRh3YueXISXD036WLlbQu50vebuJcKKiF05xz5Cj_C__Qa8wc_YWNQ";
 const FIN_MOIS = "2026-09-30";
 const PTS = { vmens: 300, v12: 660, passage: 150 };
@@ -412,6 +413,11 @@ function rendsJour(sec, id, cfg, saisies) {
   const dz = dose(cfg, saisies, jour);
   const sJ = saisieDuJour(saisies, jour);
   const d = Object.assign({}, (sJ && sJ.d) || {});
+  try {
+    const snap = JSON.parse(localStorage.getItem(CLE_SNAP) || "null");
+    const majServeur = sJ && sJ.maj ? new Date(sJ.maj).getTime() : 0;
+    if (snap && snap.jour === jour && snap.ts > majServeur) Object.assign(d, snap.d);
+  } catch (_) {}
   const lignes = lignesJournee(cfg, dz, d);
   const fait = (l) => { const x = +d[l.k] || 0; return l.cible ? x >= l.cible : x > 0; };
   const pctJ = () => Math.round((lignes.filter(fait).length / lignes.length) * 100);
@@ -495,7 +501,11 @@ function rendsJour(sec, id, cfg, saisies) {
   for (const row of $$(".todo", sec)) {
     const l = lignes.find((x) => x.k === row.dataset.k);
     const inp = $("input", row);
-    const change = () => { d[l.k] = inp.value; row.classList.toggle("ok", fait(l)); majTete(); sauve(); };
+    const change = () => {
+      d[l.k] = inp.value;
+      try { localStorage.setItem(CLE_SNAP, JSON.stringify({ jour, d, ts: Date.now() })); } catch (_) {}
+      row.classList.toggle("ok", fait(l)); majTete(); sauve();
+    };
     inp.oninput = change;
     for (const bt of $$("button", row)) bt.onclick = () => {
       inp.value = Math.max(0, (parseInt(inp.value, 10) || 0) + parseInt(bt.dataset.m, 10));
